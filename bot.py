@@ -9,6 +9,11 @@ scope = "user-read-playback-state user-modify-playback-state"
 config = configparser.ConfigParser()
 
 
+# Take the two scripts i provided and merge them, so they both use the same flask app (prioritise the app created by the "bot.py"script) , the two separate functions attached to the "/callback" route should be merged and check first for the configs related to the bot.py then for the configs related to the twitch.py.
+# The irc server in twitch.py should be on a separate thread than the bot itself, with a central thread to manage the exchange of information if necessary (create a dummy system to share data between the two threads safely).
+# Last, but not least, the two setups should be done BEFORE starting the threads so once the threads start they are both fully working.
+
+
 class BotAPPedali:
     def __init__(self):
         self.app = Flask(__name__)

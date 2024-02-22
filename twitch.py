@@ -35,7 +35,6 @@ class TwitchBot(SingleServerIRCBot):
         server = 'irc.chat.twitch.tv'
         port = 6667
         print(f"Connecting to {self.channel}")
-        TwitchBot.instance = self
 
         SingleServerIRCBot.__init__(self, [(server, port, f"oauth:{self.token}")], self.username, self.username)
 
@@ -61,7 +60,7 @@ class TwitchBot(SingleServerIRCBot):
         # Check if the token exists and is valid; if not, start the OAuth flow
         if not self.config['twitch'].get('token'):
             print("Initiating OAuth flow to obtain token...")
-            Thread(target=lambda: APP.run(port=5000, debug=False)).start()
+            Thread(target=lambda: APP.run(port=5000, debug=False, ssl_context=("localhost.ecc.crt", "localhost.ecc.key"))).start()
             self.start_oauth_flow()
             print("Please complete the OAuth flow in the browser.")
         with open('config.ini', 'w') as configfile:
@@ -70,7 +69,7 @@ class TwitchBot(SingleServerIRCBot):
     def start_oauth_flow(self):
         params = {
             'client_id': self.config.get('twitch', 'client_id'),
-            'redirect_uri': 'http://localhost:5000/callback',
+            'redirect_uri': 'https://localhost:5000/callback',
             'response_type': 'code',
             'scope': SCOPE
         }
@@ -85,7 +84,7 @@ class TwitchBot(SingleServerIRCBot):
             'client_secret': self.config.get('twitch', 'client_secret'),
             'code': code,
             'grant_type': 'authorization_code',
-            'redirect_uri': 'http://localhost:5000/callback'
+            'redirect_uri': 'https://localhost:5000/callback'
         }
         response = requests.post(TOKEN_URL, data=payload)
         response_json = response.json()
@@ -96,10 +95,7 @@ class TwitchBot(SingleServerIRCBot):
         with open(CONFIG_FILE, 'w') as configfile:
             self.config.write(configfile)
 
-        os._exit(0)  # Terminate the Flask thread after writing the config
-
-    def on_welcome(self, connection, event):
-        connection.join(self.channel)
+        os._exit(0)
         print(f"Joined {self.channel}")
 
     def on_pubmsg(self, connection, event):
