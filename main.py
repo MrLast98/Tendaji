@@ -14,7 +14,9 @@ from twitchio.ext import commands
 CONFIG_FILE = 'config.ini'
 AUTHORIZATION_URL = 'https://id.twitch.tv/oauth2/authorize'
 TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
-scope_spotify = "user-read-playback-stat,user-modify-playback-state"
+OAUTH_AUTHORIZE_URL = 'https://accounts.spotify.com/authorize'
+OAUTH_TOKEN_URL = 'https://accounts.spotify.com/api/token'
+scope_spotify = "user-read-playback-state user-modify-playback-state"
 scope_twitch = 'chat:read chat:edit'
 
 config = configparser.ConfigParser()
@@ -25,12 +27,11 @@ app.config['SESSION_COOKIE_NAME'] = 'spotify-login-session'
 auth_manager = None
 server = 'irc.chat.twitch.tv'
 port = 6697
-twitch_thread = None
 sp = None
 
 
 @app.route('/')
-def index():
+async def index():
     if not auth_manager:
         return "Spotify OAuth is not initialized. Check your config.ini file."
     auth_url = auth_manager.get_authorize_url()
@@ -38,7 +39,7 @@ def index():
 
 
 @app.route('/callback')
-def callback():
+async def callback():
     session['token_info'] = auth_manager.get_access_token(request.args['code'])
     config.set("spotify", "token", auth_manager.get_access_token(request.args['code'])['access_token'])
     with open(CONFIG_FILE, 'w') as configfile:
@@ -48,7 +49,7 @@ def callback():
 
 
 @app.route('/currently_playing')
-def currently_playing():
+async def currently_playing():
     token_info = session.get('token_info', None)
     if not token_info:
         return redirect('/')
@@ -65,7 +66,7 @@ def currently_playing():
 
 
 @app.route('/callback_twitch')
-def callback_twitch():
+async def callback_twitch():
     code = request.args.get('code')
     payload = {
         'client_id': config.get('twitch', 'client_id'),
@@ -85,6 +86,7 @@ def callback_twitch():
             config.write(configfile)
     else:
         print("Error")
+    redirect("/currently_playing")
 
 
 def ensure_config_section_exists(section):
@@ -126,8 +128,6 @@ def setup():
 
 class TwitchBot(commands.Bot):
     def __init__(self):
-        config = configparser.ConfigParser()
-        config.read(CONFIG_FILE)
         print(f"Connecting to {config.get('twitch', 'channel')}")
         self.sp = spotipy.Spotify(auth=config.get("spotify", "token"))
         self.device_id = self.sp.me()
@@ -137,7 +137,7 @@ class TwitchBot(commands.Bot):
         # Notify us when everything is ready!
         # We are logged in and ready to chat and use commands...
         print(f'Logged in as | {self.nick}')
-        print(f'User id is | {self.user_id}')
+        # print(f'User id is | {self.user_id}')
 
     async def event_message(self, message):
         # Messages with echo set to True are messages sent by the bot...
@@ -158,15 +158,17 @@ class TwitchBot(commands.Bot):
 
     @commands.command()
     async def play(self, ctx: commands.Context):
-
-        await ctx.send('Played!')
+        for a in self.sp.devices()["devices"]:
+            if a["is_active"]:
+                self.sp.start_playback(a["id"])
+                await ctx.send('Played!')
 
     @commands.command()
     async def pause(self, ctx: commands.Context):
-
-        self.sp.pause_playback(self.device_id)
-
-        await ctx.send('Paused!')
+        for a in self.sp.devices()["devices"]:
+            if a["is_active"]:
+                self.sp.pause_playback(a["id"])
+                await ctx.send('Paused!')
 
     @commands.command()
     async def sr(self, ctx: commands.Context):
