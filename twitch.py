@@ -1,3 +1,4 @@
+import spotipy
 from twitchio.ext import commands
 import configparser
 
@@ -11,7 +12,7 @@ class TwitchBot(commands.Bot):
     def __init__(self):
         config.read(CONFIG_FILE)
         print(f"Connecting to {config.get('twitch', 'channel')}")
-        # self.sp = spotipy.Spotify(auth=config.get("spotify", "token"))
+        self.sp = spotipy.Spotify(auth=config.get("spotify", "token"))
         super().__init__(token=config.get('twitch', 'token'), prefix="!", initial_channels=["#" + config.get('twitch', 'channel')])
 
     async def event_ready(self):
@@ -26,6 +27,7 @@ class TwitchBot(commands.Bot):
         if message.echo:
             return
         # Print the contents of our message to console...
+        print(message.content)
 
         # Since we have commands and are overriding the default `event_message`
         # We must let the bot know we want to handle and invoke our commands...
@@ -36,26 +38,25 @@ class TwitchBot(commands.Bot):
 
         await ctx.send(f'Hello {ctx.author.name}!')
 
-    # @commands.command()
-    # async def play(self, ctx: commands.Context):
-    #     for a in self.sp.devices()["devices"]:
-    #         if a["is_active"]:
-    #             self.sp.start_playback(a["id"])
-    #             await ctx.send('Played!')
-    #
-    # @commands.command()
-    # async def pause(self, ctx: commands.Context):
-    #     for a in self.sp.devices()["devices"]:
-    #         if a["is_active"]:
-    #             self.sp.pause_playback(a["id"])
-    #             await ctx.send('Paused!')
-    #
-    # @commands.command()
-    # async def sr(self, ctx: commands.Context):
-    #     song = ctx.message.content.strip("!sr")
-    #     song = song.split("/")[-1]
-    #     self.sp.add_to_queue(f"spotify:track:{song}")
-    #
-    #     await ctx.send('Added!')
+    @commands.command()
+    async def play(self, ctx: commands.Context):
+        for a in self.sp.devices()["devices"]:
+            if a["is_active"]:
+                self.sp.start_playback(a["id"])
+                await ctx.send('Played!')
 
-TwitchBot().run()
+    @commands.command()
+    async def pause(self, ctx: commands.Context):
+        for a in self.sp.devices()["devices"]:
+            if a["is_active"]:
+                self.sp.pause_playback(a["id"])
+                await ctx.send('Paused!')
+
+    @commands.command()
+    async def sr(self, ctx: commands.Context):
+        song = ctx.message.content.strip("!sr")
+        song = song.split("/")[-1]
+        self.sp.add_to_queue(f"spotify:track:{song}")
+
+        await ctx.send('Added!')
+

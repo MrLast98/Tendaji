@@ -1,13 +1,18 @@
+import asyncio
 import configparser
 import os
 import webbrowser
-from flask import Flask, request, redirect, session
 import requests
 from urllib.parse import urlencode
 import spotipy
+from quart import Quart, request, redirect, session
 from spotipy.oauth2 import SpotifyOAuth
 import secrets
-from TwitchWebsocket import TwitchWebsocket
+import multiprocessing
+import queue
+from twitch import TwitchBot
+from quart import Quart
+from ssl import SSLContext, PROTOCOL_TLS_SERVER
 
 # Configuration and Flask App
 CONFIG_FILE = 'config.ini'
@@ -18,15 +23,20 @@ OAUTH_TOKEN_URL = 'https://accounts.spotify.com/api/token'
 scope_spotify = "user-read-playback-state user-modify-playback-state"
 scope_twitch = 'chat:read chat:edit'
 
+
 config = configparser.ConfigParser()
-app = Flask(__name__)
+app = Quart(__name__)
 app.config['SESSION_COOKIE_NAME'] = 'spotify-login-session'
 
+SERVER = 'irc.chat.twitch.tv'
+PORT = 6697
+NICKNAME = ""
+TOKEN = ""
+CHANNEL = ""
 auth_manager = None
-server = 'irc.chat.twitch.tv'
-port = 6697
 sp = None
-
+command_queue = queue.Queue()  # Initialize a command queue for inter-process communication
+done = False
 
 @app.route('/')
 async def index():
@@ -76,7 +86,7 @@ async def callback_twitch():
     response = requests.post(TOKEN_URL, data=payload)
     response_json = response.json()
     access_token = response_json.get('access_token')
-
+    print(access_token)
     # Save the access token and other details to config.ini
     if access_token:
         config.set('twitch', 'token', access_token)
@@ -124,39 +134,40 @@ def setup():
         print("Please complete the OAuth flow in the browser.")
 
 
-# TwitchBot class modified to use twitchwebsocket
-class TwitchWebSocketBot:
-    def __init__(self):
-        self.sp = spotipy.Spotify(auth=config.get("spotify", "token"))
-        self.channel = config.get('twitch', 'channel')
-        self.token = config.get('twitch', 'token')
-        self.ws = None
-
-    def on_message(self, message):
-        # Handle messages received from Twitch chat
-        print(message)
-
-    def connect(self):
-        # Ensure correct usage of TwitchWebsocket's API for connection setup
-        self.ws = TwitchWebsocket(host="wss://irc-ws.chat.twitch.tv",
-                                  port=443,
-                                  nick=self.channel,
-                                  auth=f"oauth:{self.token}",  # Ensure proper auth token format
-                                  callback=self.on_message,
-                                  chan=f"#{self.channel}",
-                                  capability=["commands", "tags", "membership"])
-        self.ws.start_bot()
-
-    def send_message(self, channel, message):
-        # Send a message to a Twitch chat channel
-        if self.ws:
-            self.ws.send_message(channel, message)
+def twitch_irc_socket(token, nickname, channel, cmd_queue):
+    global done
+    if not done:
+        TwitchBot().run()
+        done = True
 
 
-# Start Twitch WebSocket Bot
-def start_twitch_websocket_bot():
-    bot = TwitchWebSocketBot()
-    bot.connect()
+def process_commands(cmd_queue):
+    sp = spotipy.Spotify(auth=config.get("spotify", "token"))
+    while True:
+        try:
+            command = cmd_queue.get(timeout=1)  # Adjust timeout as needed
+            if command == "play":
+                # Assuming `sp` is your Spotipy instance with appropriate scope
+                sp.start_playback()
+            elif command == "pause":
+                sp.pause_playback()
+            # Implement other commands like "list queue", "add to queue", etc.
+        except queue.Empty:
+            continue
+
+
+async def main():
+    bot = TwitchBot()
+    bot_task = asyncio.create_task(bot.start())  # Replace bot.run() with bot.start() if necessary
+
+    # Create SSL context
+    ssl_context = SSLContext(PROTOCOL_TLS_SERVER)
+    ssl_context.load_cert_chain('local.ecc.crt', 'local.ecc.key')
+
+    # Adjust the quart_task to include SSL context
+    quart_task = asyncio.create_task(app.run_task(port=5000, debug=True, ssl=ssl_context))
+
+    await asyncio.gather(bot_task, quart_task)
 
 
 # Main Function
@@ -202,4 +213,11 @@ if __name__ == "__main__":
         config.set('twitch', 'client_secret', "")
         with open(CONFIG_FILE, 'w') as configfile:
             config.write(configfile)
-    app.run(port=5000, debug=True, ssl_context=("localhost.ecc.crt", "localhost.ecc.key"))
+
+    # Start the command processor in a separate process
+    command_processor = multiprocessing.Process(target=process_commands, args=(command_queue,))
+    command_processor.start()
+    NICKNAME = config.get('twitch', 'channel')
+    TOKEN = config.get('twitch', 'token')
+    CHANNEL = config.get('twitch', 'channel')
+    asyncio.run(main())
