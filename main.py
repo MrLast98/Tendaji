@@ -80,10 +80,32 @@ async def currently_playing():
     if track is not None:
         track_name = track['item']['name']
         artist_name = track['item']['artists'][0]['name']
-        print(f"Currently playing: {track_name} by {artist_name}")
-        return f"Currently playing: {track_name} by {artist_name}"
+        album_name = track['item']['album']['name']
+        album_image_url = track['item']['album']['images'][0]['url'] if track['item']['album']['images'] else "No image available"
+        refresh_rate = 30  # Refresh every 30 seconds
+
+        html_content = f'''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Currently Playing</title>
+            <meta http-equiv="refresh" content="{refresh_rate}">
+            <style>
+                body {{ font-family: Arial, sans-serif; }}
+                .album-art {{ width: 300px; }}
+            </style>
+        </head>
+        <body>
+            <h1>Currently Playing</h1>
+            <p><strong>Track:</strong> {track_name}</p>
+            <p><strong>Artist:</strong> {artist_name}</p>
+            <p><strong>Album:</strong> {album_name}</p>
+            <img src="{album_image_url}" alt="Album art" class="album-art" />
+        </body>
+        </html>
+        '''
+        return html_content
     else:
-        print("No track is currently playing.")
         return "No track is currently playing."
 
 
