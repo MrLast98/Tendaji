@@ -1,6 +1,10 @@
+import string
+import time
+
 import spotipy
 from twitchio.ext import commands
 import configparser
+import json
 
 
 CONFIG_FILE = 'config.ini'
@@ -13,6 +17,20 @@ class TwitchBot(commands.Bot):
         config.read(CONFIG_FILE)
         print(f"Connecting to {config.get('twitch', 'channel')}")
         super().__init__(token=config.get('twitch', 'token'), prefix="!", initial_channels=["#" + config.get('twitch', 'channel')])
+        self.load_commands()
+
+    def load_commands(self):
+        with open("commands.json", "r") as f:
+            commands_json = json.load(f)
+        for command, message in commands_json.items():
+            # Use a closure to correctly capture 'message' for each command
+            async def command_handler(ctx, command=command, message=message):
+                await ctx.send(message)
+
+            # Dynamically set the name of the handler to match the command
+            command_handler.__name__ = command
+            # Use the command decorator to register the command
+            self.command(name=command)(command_handler)
 
     async def event_ready(self):
         # Notify us when everything is ready!
@@ -27,10 +45,14 @@ class TwitchBot(commands.Bot):
             return
         # Print the contents of our message to console...
         print(message.content)
-
         # Since we have commands and are overriding the default `event_message`
         # We must let the bot know we want to handle and invoke our commands...
         await self.handle_commands(message)
+
+    @commands.command()
+    async def generic_command(self, ctx: commands.Context, message: string):
+        await ctx.send(message)
+
 
     @commands.command()
     async def hello(self, ctx: commands.Context):
