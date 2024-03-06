@@ -5,11 +5,22 @@ import spotipy
 from twitchio.ext import commands
 import configparser
 import json
+from enum import Enum
 
 
 CONFIG_FILE = 'config.ini'
 config = configparser.ConfigParser()
 config.read(CONFIG_FILE)
+
+
+class CommandLevel(Enum):
+    SUB = "subscriber"
+    VIP = "vip"
+    MOD = "moderator"
+
+
+def is_user_allowed(message, level: CommandLevel):
+    return message.tags[level.value] == "1"
 
 
 class TwitchBot(commands.Bot):
@@ -43,6 +54,7 @@ class TwitchBot(commands.Bot):
         # For now, we just want to ignore them...
         if message.echo:
             return
+        print(json.dumps(message.tags))
         # Print the contents of our message to console...
         print(message.content)
         # Since we have commands and are overriding the default `event_message`
@@ -77,13 +89,17 @@ class TwitchBot(commands.Bot):
 
     @commands.command()
     async def sr(self, ctx: commands.Context):
-        sp = spotipy.Spotify(auth=config.get("spotify", "token"))
+        # if ctx.message.tags['subscriber'] == "1":
+        if is_user_allowed(ctx.message, CommandLevel.SUB):
+            sp = spotipy.Spotify(auth=config.get("spotify", "token"))
 
-        song = ctx.message.content.strip("!sr")
-        song = song.split("/")[-1]
-        if "?" in song:
-            song = song.split("?")[0]
-        sp.add_to_queue(f"spotify:track:{song}")
+            song = ctx.message.content.strip("!sr")
+            song = song.split("/")[-1]
+            if "?" in song:
+                song = song.split("?")[0]
+            sp.add_to_queue(f"spotify:track:{song}")
 
-        await ctx.send('Added!')
+            await ctx.send('Added!')
+        else:
+            print(f"Ignored {ctx.message}")
 

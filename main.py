@@ -44,7 +44,7 @@ else:
     config.set('twitch', 'client_id', "")
     config.set('twitch', 'client_secret', "")
     config.set('twitch', 'refresh_token', "")
-    config.set('twitch', 'expires_in', "")
+    config.set('twitch', 'expires_at', "")
 
 
 auth_manager = None
@@ -94,12 +94,26 @@ async def index():
 
 @app.route('/callback')
 async def callback():
-    session['token_info'] = auth_manager.get_access_token(request.args['code'])
-    config.set("spotify", "token", auth_manager.get_access_token(request.args['code'])['access_token'])
-    with open(CONFIG_FILE, 'w') as configfile:
-        config.write(configfile)
-    print("Token retrieved!")
-    return redirect('/currently_playing')
+    access_token = auth_manager.get_access_token(request.args['code'])['access_token']
+    if access_token:
+        session['token_info'] = access_token
+        config.set("spotify", "token", access_token)
+        with open(CONFIG_FILE, 'w') as configfile:
+            config.write(configfile)
+        return redirect("/currently_playing")
+    else:
+        error = "Error retrieving tokens"
+        f'''
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Error Occurred</title>
+            </head>
+            <body>
+                <p>Error: {error}</p>
+            </body>
+            </html>
+            '''
 
 
 @app.route('/currently_playing')
@@ -212,6 +226,11 @@ def start_oauth_flow():
     }
     url = f"{AUTHORIZATION_URL}?{urlencode(params)}"
     webbrowser.open(url)
+    auth_url = auth_manager.get_authorize_url()
+    webbrowser.open(auth_url)
+    print("Please complete the OAuth flow in the browser.")
+    # if input("Press enter to continue") == "":
+    #     print("Let's go.")
 
 
 def setup():
@@ -237,87 +256,78 @@ def setup():
                                 scope=scope_spotify)
 
 
+async def update_bot_token():
+    params = {
+        'grant_type': 'refresh_token',
+        'refresh_token': config.get("twitch", "refresh_token"),
+        'client_id': config.get("twitch", "client_id"),
+        'client_secret': config.get("twitch", "client_secret"),
+    }
+    response = requests.post(TOKEN_URL, data=params)
+    if response.status_code == 200:
+        response_json = response.json()
+        access_token = response_json.get('access_token')
+        refresh_token = response_json.get('refresh_token')
+        expires_at = response_json.get("expires_at")
+        # Use the new refresh token if provided, otherwise keep the old one
+        config.set("twitch", "token", access_token)
+        config.set("twitch", "refresh_token", refresh_token)
+        config.set("twitch", "expires_at", str(expires_at))
+    else:
+        raise Exception("Failed to refresh Twitch token")
+
+
 async def recurring_task(interval):
     global TASKS
     while True:
         # Place your task logic here
-        print("Executing recurring task...")
-        print(int(time.time()) >= int(config.get("twitch", "expires_at")))
-        print(int(time.time()))
-        print(int(config.get("twitch", "expires_at")))
-        if int(time.time()) >= int(config.get("twitch", "expires_at")):
-            params = {
-                'grant_type': 'refresh_token',
-                'refresh_token': config.get("twitch", "refresh_token"),
-                'client_id': config.get("twitch", "client_id"),
-                'client_secret': config.get("twitch", "client_secret"),
-            }
-            response = requests.post(TOKEN_URL, data=params)
-            if response.status_code == 200:
-                response_json = response.json()
-                access_token = response_json.get('access_token')
-                refresh_token = response_json.get('refresh_token')
-                expires_at = response_json.get("expires_at")
-                # Use the new refresh token if provided, otherwise keep the old one
-                config.set("twitch", "access_token", access_token)
-                config.set("twitch", "refresh_token", refresh_token)
-                config.set("twitch", "expires_at", str(expires_at))
-                if TASKS["bot"] is not None and not TASKS["bot"].cancelled():
-                    TASKS["bot"].cancel()
-                    await TASKS["bot"]
-                bot = TwitchBot()
-                bot_task = asyncio.create_task(start_bot_and_handle_cancellation(bot))
-                TASKS["bot"] = bot_task
-                print("Updated bot with new token")
-            else:
-                raise Exception("Failed to refresh Twitch token")
+        print("Sanity check!")
+        if not config.get("twitch", "expires_at") or not config.get("twitch", "refresh_token") or not config.get("twitch", "token"):
+            start_oauth_flow()
+        elif int(time.time()) >= int(config.get("twitch", "expires_at")):
+            await update_bot_token()
+            if TASKS["bot"] is not None and not TASKS["bot"].cancelled():
+                TASKS["bot"].cancel()
+                await TASKS["bot"]
+            create_new_bot()
+            print("Bot Task Created")
+            print("Updated bot with new token")
         else:
             print("Waited for nothing!")
         await asyncio.sleep(interval)
         # Wait for 'interval' seconds before running the task again
 
 
-async def start_bot_and_handle_cancellation(bot):
-    try:
-        await bot.start()  # Start the bot
-    except asyncio.CancelledError:
-        await bot.close()  # Perform cleanup
-        raise
+def create_new_bot():
+    bot = TwitchBot()
+    bot_task = asyncio.create_task(bot.start())
+    TASKS["bot"] = bot_task
 
 
 async def main():
     global TASKS
-    # Check if the token exists and is valid; if not, start the OAuth flow
-    if not config['twitch'].get('token') or not config['twitch'].get('refresh_token') or not config['twitch'].get('expires_at'):
-        print("Initiating OAuth flow to obtain token...")
-        start_oauth_flow()
-        auth_url = auth_manager.get_authorize_url()
-        webbrowser.open(auth_url)
-        print("Please complete the OAuth flow in the browser.")
-
-    bot = TwitchBot()
-    bot_task = asyncio.create_task(start_bot_and_handle_cancellation(bot))
-    TASKS["bot"] = bot_task
-    print("Bot Task Created")
-    # Define Uvicorn config for your Quart app
     uvicorn_config = uvicorn.Config(app, host="localhost", port=5000,
                                     ssl_certfile='localhost.ecc.crt',
                                     ssl_keyfile='localhost.ecc.key',
                                     loop="asyncio", log_level="info")
     server = uvicorn.Server(config=uvicorn_config)
-
     # Start the Uvicorn server asynchronously
     quart_task = asyncio.create_task(server.serve())
     TASKS["quart"] = quart_task
     print("Quart Task Created")
 
+    # Check if the token exists and is valid; if not, start the OAuth flow
+    if not config['twitch'].get('token') or not config['twitch'].get('refresh_token') or not config['twitch'].get('expires_at'):
+        print("Initiating OAuth flow to obtain token...")
+        start_oauth_flow()
+
+    # Define Uvicorn config for your Quart app
+
     updater_task = asyncio.create_task(recurring_task(300))
     TASKS["updater"] = updater_task
     print("Updater Task Created")
-
-    gathered_tasks = asyncio.gather(TASKS["quart"], TASKS["updater"])  # Corrected to gather all tasks directly
     try:
-        await gathered_tasks
+        await asyncio.gather(updater_task, quart_task)  # Corrected to gather all tasks directly
     except asyncio.CancelledError:
         print("Tasks were cancelled.")
     except Exception as e:
