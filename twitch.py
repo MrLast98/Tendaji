@@ -1,11 +1,9 @@
 import string
-import time
 
 import spotipy
 from twitchio.ext import commands
 import configparser
 import json
-from enum import Enum
 
 
 CONFIG_FILE = 'config.ini'
@@ -13,21 +11,16 @@ config = configparser.ConfigParser()
 config.read(CONFIG_FILE)
 
 
-class CommandLevel(Enum):
-    SUB = "subscriber"
-    VIP = "vip"
-    MOD = "moderator"
-
-
-def is_user_allowed(message, level: CommandLevel):
-    return message.tags[level.value] == "1"
+def is_user_allowed(author):
+    return author.is_subscriber or author.is_vip or author.is_mod or author.is_broadcaster
 
 
 class TwitchBot(commands.Bot):
     def __init__(self):
         config.read(CONFIG_FILE)
         print(f"Connecting to {config.get('twitch', 'channel')}")
-        super().__init__(token=config.get('twitch', 'token'), prefix="!", initial_channels=["#" + config.get('twitch', 'channel')])
+        channel = config.get('twitch', 'channel')
+        super().__init__(token=config.get('twitch-token', 'access_token'), prefix="!", initial_channels=["#" + channel])
         self.load_commands()
 
     def load_commands(self):
@@ -61,9 +54,11 @@ class TwitchBot(commands.Bot):
         # We must let the bot know we want to handle and invoke our commands...
         await self.handle_commands(message)
 
+
     @commands.command()
     async def generic_command(self, ctx: commands.Context, message: string):
-        await ctx.send(message)
+        if ctx.author.is_subscriber or ctx.author.is_vip or ctx.author.is_mod:
+            await ctx.send(message)
 
 
     @commands.command()
@@ -73,25 +68,26 @@ class TwitchBot(commands.Bot):
 
     @commands.command()
     async def play(self, ctx: commands.Context):
-        sp = spotipy.Spotify(auth=config.get("spotify", "token"))
-        for a in sp.devices()["devices"]:
-            if a["is_active"]:
-                sp.start_playback(a["id"])
-                await ctx.send('Played!')
+        if is_user_allowed(ctx.author):
+            sp = spotipy.Spotify(auth=config.get("spotify-token", "access_token"))
+            for a in sp.devices()["devices"]:
+                if a["is_active"]:
+                    sp.start_playback(a["id"])
+                    await ctx.send('Played!')
 
     @commands.command()
     async def pause(self, ctx: commands.Context):
-        sp = spotipy.Spotify(auth=config.get("spotify", "token"))
-        for a in sp.devices()["devices"]:
-            if a["is_active"]:
-                sp.pause_playback(a["id"])
-                await ctx.send('Paused!')
+        if is_user_allowed(ctx.author):
+            sp = spotipy.Spotify(auth=config.get("spotify-token", "access_token"))
+            for a in sp.devices()["devices"]:
+                if a["is_active"]:
+                    sp.pause_playback(a["id"])
+                    await ctx.send('Paused!')
 
     @commands.command()
     async def sr(self, ctx: commands.Context):
-        # if ctx.message.tags['subscriber'] == "1":
-        if is_user_allowed(ctx.message, CommandLevel.SUB):
-            sp = spotipy.Spotify(auth=config.get("spotify", "token"))
+        if is_user_allowed(ctx.author):
+            sp = spotipy.Spotify(auth=config.get("spotify-token", "access_token"))
 
             song = ctx.message.content.strip("!sr")
             song = song.split("/")[-1]
