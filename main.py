@@ -1,5 +1,6 @@
 import asyncio
 import configparser
+import datetime
 import os
 import time
 import webbrowser
@@ -25,11 +26,23 @@ app = Quart(__name__)
 app.config['SESSION_COOKIE_NAME'] = 'spotify-login-session'
 
 config = configparser.ConfigParser()
+
+
+def print_to_logs(message):
+    # Get current timestamp in the specified format
+    timestamp = datetime.datetime.now().strftime('%d/%m/%y - %H:%M')
+    # Format the log entry
+    log_entry = f"{timestamp}: {message}\n"
+    # Open the log file and append the log entry
+    with open("log.txt", 'a') as file:
+        file.write(log_entry)
+
+
 if os.path.exists(CONFIG_FILE):
     config.read(CONFIG_FILE)
 else:
-    print("config.ini file not found")
-    print("Generating a new Flask secret_key.")
+    print_to_logs("config.ini file not found")
+    print_to_logs("Generating a new Flask secret_key.")
     app.secret_key = secrets.token_hex(16)
     config.add_section('app')
     config.add_section('twitch')
@@ -51,16 +64,12 @@ else:
     config.set('twitch-token', 'expires_at', '')  # Use Unix timestamp
 
 
-auth_manager = None
-sp = None
-done = False
-
-
 TASKS = {
     "bot": {
         "task": None,
         "instance": None
     },
+    "auth_manager": None,
     "quart": None,
     "updater": None
 }
@@ -69,44 +78,37 @@ TASKS = {
 def save_config():
     with open(CONFIG_FILE, 'w') as configfile:
         config.write(configfile)
-    print("Configuration saved.")
+    print_to_logs("Configuration saved.")
 
 
-async def shutdown():
-    """Gracefully shut down all tasks and save configurations."""
-    print("Initiating shutdown...")
-    tasks = [t for t in TASKS.items() if t is not None]
-    for task in tasks:
-        task.cancel()
-    await asyncio.gather(*tasks, return_exceptions=True)
-    save_config()
-    print("Cleanup complete. Exiting...")
-
-
-def signal_handler(loop):
-    """Initiates the shutdown process."""
-    print("Signal received, shutting down.")
-    for task in asyncio.all_tasks(loop):
-        task.cancel()
-    asyncio.ensure_future(shutdown())
+# async def shutdown():
+#     """Gracefully shut down all tasks and save configurations."""
+#     print_to_logs("Initiating shutdown...")
+#     tasks = [t for t in TASKS.items() if t is not None]
+#     for task in tasks:
+#         task.cancel()
+#     await asyncio.gather(*tasks, return_exceptions=True)
+#     save_config()
+#     print_to_logs("Cleanup complete. Exiting...")
+#
+#
+# def signal_handler(loop):
+#     """Initiates the shutdown process."""
+#     print_to_logs("Signal received, shutting down.")
+#     for task in asyncio.all_tasks(loop):
+#         task.cancel()
+#     asyncio.ensure_future(shutdown())
 
 
 @app.route('/')
 async def index():
-    if not auth_manager:
-        return "Spotify OAuth is not initialized. Check your config.ini file."
-    if not config.get("spotify-token", "expires_at") or not config.get("spotify-token",
-                                                                      "refresh_token") or not config.get("spotify-token",
-                                                                                                         'access_token'):
-        auth_url = auth_manager.get_authorize_url()
-        return redirect(auth_url)
-    else:
-        return redirect("/currently_playing")
+    return redirect("/currently_playing")
 
 
 @app.route('/callback')
 async def callback():
-    token = auth_manager.get_access_token(request.args['code'])
+    global TASKS
+    token = TASKS["auth_manager"].get_access_token(request.args['code'])
     if token:
         session['token_info'] = token
         config.set('spotify-token', 'access_token', token['access_token'])
@@ -132,25 +134,23 @@ async def callback():
 
 @app.route('/currently_playing')
 async def currently_playing():
+    global TASKS
     token_info = session.get('token_info', None)
-    print(token_info)
-    if not token_info:
+    if token_info is None:
         token = {
             "access_token": config.get("spotify-token", "access_token"),
             "expires_at": config.get("spotify-token", "expires_at"),
             "refresh_token": config.get("spotify-token", "refresh_token"),
         }
         session["token_info"] = token
-    if auth_manager.is_token_expired(token_info):
-        return redirect('/')
-
     sp = spotipy.Spotify(auth=token_info['access_token'])
     track = sp.current_playback()
     if track is not None:
         track_name = track['item']['name']
         artist_name = track['item']['artists'][0]['name']
         album_name = track['item']['album']['name']
-        album_image_url = track['item']['album']['images'][0]['url'] if track['item']['album']['images'] else "No image available"
+        album_image_url = track['item']['album']['images'][0]['url'] if track['item']['album'][
+            'images'] else "No image available"
         refresh_rate = 30  # Refresh every 30 seconds
 
         html_content = f'''
@@ -174,6 +174,11 @@ async def currently_playing():
         </html>
         '''
         return html_content
+    elif (not config.get("spotify-token", "expires_at") or
+          not config.get("spotify-token", "refresh_token") or
+          not config.get("spotify-token", 'access_token') or
+          TASKS["auth_manager"] is None):
+        return redirect(TASKS["auth_manager"].get_authorize_url())
     else:
         return "No track is currently playing."
 
@@ -238,10 +243,11 @@ def ensure_config_section_exists(section):
 def validate_config():
     twitch_keys = ['channel', 'client_id', 'client_secret']
     token_keys = ['access_token', 'refresh_token', 'expires_at']
-    return all(config.get('twitch', key) for key in twitch_keys) and all(config.get('twitch-token', key) for key in token_keys)
+    return all(config.get('twitch', key) for key in twitch_keys) and all(
+        config.get('twitch-token', key) for key in token_keys)
 
 
-def start_oauth_flow():
+def start_twitch_oauth_flow():
     params = {
         'client_id': config.get('twitch', 'client_id'),
         'redirect_uri': 'https://localhost:5000/callback_twitch',
@@ -250,15 +256,15 @@ def start_oauth_flow():
     }
     url = f"{AUTHORIZATION_URL}?{urlencode(params)}"
     webbrowser.open(url)
-    auth_url = auth_manager.get_authorize_url()
+
+
+def start_spotify_oauth_flow():
+    auth_url = TASKS["auth_manager"].get_authorize_url()
     webbrowser.open(auth_url)
-    print("Please complete the OAuth flow in the browser.")
-    # if input("Press enter to continue") == "":
-    #     print("Let's go.")
 
 
 def setup():
-    global auth_manager
+    global TASKS
     # Prompt for missing details
     if not config['twitch'].get('channel'):
         config.set("twitch", "channel", input("Enter the channel you want to join: "))
@@ -274,13 +280,13 @@ def setup():
         config.set("spotify", "client_secret", input("Enter your Spotify client secret: "))
     with open(CONFIG_FILE, 'w') as configfile:
         config.write(configfile)
-    auth_manager = SpotifyOAuth(client_id=config.get('spotify', 'client_id', fallback=None),
-                                client_secret=config.get('spotify', 'client_secret', fallback=None),
-                                redirect_uri=config.get('spotify', 'redirect_uri', fallback=None),
-                                scope=scope_spotify)
+    TASKS["auth_manager"] = SpotifyOAuth(client_id=config.get('spotify', 'client_id', fallback=None),
+                                         client_secret=config.get('spotify', 'client_secret', fallback=None),
+                                         redirect_uri=config.get('spotify', 'redirect_uri', fallback=None),
+                                         scope=scope_spotify)
 
 
-async def update_bot_token():
+def update_bot_token():
     params = {
         'grant_type': 'refresh_token',
         'refresh_token': config.get("twitch-token", "refresh_token"),
@@ -298,45 +304,59 @@ async def update_bot_token():
         config.set("twitch-token", "refresh_token", refresh_token)
         config.set("twitch-token", "expires_at", str(expires_at))
     else:
-        raise Exception("Failed to refresh Twitch token")
+        raise Exception(f"Failed to refresh Twitch token: {response.status_code}")
+    save_config()
+    create_new_bot()
+
+
+def check_twitch():
+    if TASKS["bot"]["instance"] is None:
+        bot = TwitchBot()
+        TASKS["bot"]["instance"] = bot
+        TASKS["bot"]["task"] = asyncio.create_task(bot.start())
+    if (not config.get("twitch-token", "expires_at") or
+            not config.get("twitch-token","refresh_token") or
+            not config.get("twitch-token", 'access_token')):
+        print_to_logs("error config not found")
+        start_twitch_oauth_flow()
+    elif not config.get('twitch-token', 'expires_at'):
+        if int(config.get('twitch-token', 'expires_at')) < int(time.time()):
+            update_bot_token()
+    else:
+        print_to_logs("Twitch is OK!")
+
+
+def check_spotify():
+    if TASKS["auth_manager"] is None:
+        print_to_logs("No auth manager")
+        TASKS["auth_manager"] = SpotifyOAuth(client_id=config.get("spotify", "client_id"),
+                                             client_secret=config.get("spotify", "client_secret"),
+                                             redirect_uri=config.get("spotify", "redirect_uri"),
+                                             scope=scope_spotify)
+        return redirect(TASKS["auth_manager"].get_authorize_url())
+    if (not config.get("spotify-token", "expires_at") or
+            not config.get("spotify-token", "refresh_token") or
+            not config.get("spotify-token", 'access_token')):
+        print_to_logs("No Token")
+        start_spotify_oauth_flow()
+    if TASKS["auth_manager"].is_token_expired({"expires_at": int(config.get("spotify-token", 'expires_at'))}):
+        print_to_logs("Expired Token")
+        start_spotify_oauth_flow()
+    else:
+        print_to_logs("Spotify is OK!")
 
 
 async def recurring_task(interval):
-    global TASKS
     while True:
-        # Place your task logic here
-        print("Sanity check!")
-        if not TASKS["bot"]["instance"]:
-            bot = TwitchBot()
-            TASKS["bot"]["instance"] = bot
-            TASKS["bot"]["task"] = asyncio.create_task(bot.start())
-        if not config.get("twitch-token", "expires_at") or not config.get("twitch-token", "refresh_token") or not config.get("twitch-token", 'access_token'):
-            print("error config not found")
-            start_oauth_flow()
-        elif int(config.get('twitch-token', 'expires_at')) < int(time.time()):
-            params = {
-                'grant_type': 'refresh_token',
-                'refresh_token': config.get('twitch-token', 'refresh_token'),
-                'client_id': config.get('twitch', 'client_id'),
-                'client_secret': config.get('twitch', 'client_secret'),
-            }
-            response = requests.post(TOKEN_URL, data=params)
-            response_json = response.json()
-            print(response_json)
-            access_token = response_json.get('access_token')
-            refresh_token = response_json.get('refresh_token', config.get('twitch-token', 'refresh_token'))  # Use old refresh token if none provided
-            expires_in = response_json.get('expires_in')
-            expires_at = int(time.time()) + expires_in
-            config.set('twitch-token', 'access_token', access_token)
-            config.set('twitch-token', 'refresh_token', refresh_token)
-            config.set('twitch-token', 'expires_at', str(expires_at))
-            save_config()
-            print("Bot Task Created")
-            print("Updated bot with new token")
-        else:
-            print("Waited for nothing!")
-        await asyncio.sleep(interval)
+        # Twitch check
+        print_to_logs("Twitch sanity check!")
+        check_twitch()
+
+        # Spotify check
+        print_to_logs("Spotify sanity check!")
+        check_spotify()
         # Wait for 'interval' seconds before running the task again
+        await asyncio.sleep(interval)
 
 
 def create_new_bot():
@@ -356,48 +376,37 @@ async def main():
     # Start the Uvicorn server asynchronously
     quart_task = asyncio.create_task(server.serve())
     TASKS["quart"] = quart_task
-    print("Quart Task Created")
+    print_to_logs("Quart Task Created")
 
     # Check if the token exists and is valid; if not, start the OAuth flow
-    if not config['twitch-token'].get('access_token') or not config['twitch-token'].get('refresh_token') or not config['twitch-token'].get('expires_at'):
-        print("Initiating OAuth flow to obtain token...")
-        start_oauth_flow()
+    if (not config['twitch-token'].get('access_token') or
+            not config['twitch-token'].get('refresh_token') or
+            not config['twitch-token'].get('expires_at')):
+        print_to_logs("Initiating OAuth flow to obtain token...")
+        start_twitch_oauth_flow()
 
     updater_task = asyncio.create_task(recurring_task(300))
     TASKS["updater"] = updater_task
-    print("Updater Task Created")
-    try:
-        await asyncio.gather(updater_task, quart_task)  # Corrected to gather all tasks directly
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    print_to_logs("Updater Task Created")
+    # try:
+    await asyncio.gather(updater_task, quart_task)  # Corrected to gather all tasks directly
+    # except Exception as e:
+    #     print_to_logs(f"An error occurred: {e}")
 
 
 # Main Function
 if __name__ == "__main__":
-    client = config.get('spotify', 'client_id', fallback=None)
-    uri = config.get('spotify', 'redirect_uri', fallback=None)
-    secret = config.get('spotify', 'client_secret', fallback=None)
-    key = config.get('app', 'secret_key', fallback=None)
     if not validate_config():
         setup()
-
-    if client and secret and uri:
-        auth_manager = SpotifyOAuth(client_id=client,
-                                    client_secret=secret,
-                                    redirect_uri=uri,
-                                    scope=scope_spotify)
-    else:
-        print("Spotify credentials are missing in config.ini")
-
+    key = config.get('app', 'secret_key', fallback=None)
     if key:
         app.secret_key = key
     else:
-        print("App secret_key is missing in config.ini. Generating a new one.")
+        print_to_logs("App secret_key is missing in config.ini. Generating a new one.")
         app.secret_key = secrets.token_hex(16)
         config.set('app', 'secret_key', app.secret_key)
-        with open(CONFIG_FILE, 'w') as configfile:
-            config.write(configfile)
+        save_config()
     i = input("> ")
     if i != "":
-        config.set("twitch", "channel", "i")
+        config.set("twitch", "channel", f"{i}")
     asyncio.run(main())

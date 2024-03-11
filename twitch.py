@@ -8,7 +8,6 @@ import json
 
 CONFIG_FILE = 'config.ini'
 config = configparser.ConfigParser()
-config.read(CONFIG_FILE)
 
 
 def is_user_allowed(author):
@@ -54,12 +53,12 @@ class TwitchBot(commands.Bot):
         # We must let the bot know we want to handle and invoke our commands...
         await self.handle_commands(message)
 
-
     @commands.command()
     async def generic_command(self, ctx: commands.Context, message: string):
         if ctx.author.is_subscriber or ctx.author.is_vip or ctx.author.is_mod:
             await ctx.send(message)
-
+        else:
+            print(f"Ignored {ctx.message}")
 
     @commands.command()
     async def hello(self, ctx: commands.Context):
@@ -96,6 +95,4 @@ class TwitchBot(commands.Bot):
             sp.add_to_queue(f"spotify:track:{song}")
 
             await ctx.send('Added!')
-        else:
-            print(f"Ignored {ctx.message}")
 
