@@ -1,5 +1,6 @@
 import asyncio
 import configparser
+import json
 import os
 import requests
 import secrets
@@ -8,11 +9,13 @@ import sys
 import time
 import uvicorn
 import webbrowser
-from datetime import datetime
+from logger import print_to_logs, PrintColors
 from quart import Quart, request, redirect, session
 from spotipy.oauth2 import SpotifyOAuth
 from twitch import TwitchBot
 from urllib.parse import urlencode
+
+# pyinstaller --onefile --add-data "localhost.ecc.crt;." --add-data "localhost.ecc.key;." main.py
 
 
 # Configuration and Flask App
@@ -36,19 +39,6 @@ TASKS = {
     "quart": None,
     "updater": None
 }
-debug = True
-
-
-def print_to_logs(message):
-    # Get current timestamp in the specified format
-    timestamp = datetime.now().strftime('%d/%m/%y - %H:%M')
-    # Format the log entry
-    log_entry = f"{timestamp}: {message}\n"
-    if debug:
-        print(log_entry.strip("\n"))
-    # Open the log file and append the log entry
-    with open("log.txt", 'a', 'utf-8') as file:
-        file.write(log_entry)
 
 
 def create_new_bot():
@@ -70,7 +60,7 @@ def resource_path(relative_path):
 def save_config():
     with open(CONFIG_FILE, 'w') as configfile:
         config.write(configfile)
-    print_to_logs("Configuration saved.")
+    print_to_logs("Configuration saved.", PrintColors.BRIGHT_PURPLE)
 
 
 def ensure_config_section_exists(section):
@@ -136,7 +126,8 @@ def update_bot_token():
         response_json = response.json()
         access_token = response_json.get('access_token')
         refresh_token = response_json.get('refresh_token')
-        expires_at = response_json.get("expires_at")
+        expires_in = response_json.get('expires_in')
+        expires_at = int(time.time()) + expires_in
 
         config.set("twitch-token", 'access_token', access_token)
         config.set("twitch-token", "refresh_token", refresh_token)
@@ -145,6 +136,34 @@ def update_bot_token():
         raise Exception(f"Failed to refresh Twitch token: {response.status_code}")
     save_config()
     create_new_bot()
+
+
+async def refresh_spotify_token():
+    payload = {
+       "client_id": config.get('spotify', 'client_id'),
+       "grant_type": 'refresh_token',
+       "refresh_token": config.get('spotify-token', 'refresh_token'),
+    }
+
+    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+
+    response = requests.post(OAUTH_TOKEN_URL, data=payload, headers=headers)
+    if response.status_code == 200:
+        response_json = response.json()
+        access_token = response_json.get('access_token')
+        refresh_token = response_json.get('refresh_token')
+        expires_in = response_json.get('expires_in')
+        expires_at = int(time.time()) + expires_in
+        config.set("spotify-token", 'access_token', access_token)
+        config.set("spotify-token", "refresh_token", refresh_token)
+        config.set("spotify-token", "expires_at", str(expires_at))
+        print_to_logs(f"New Token Acquired! {access_token}, {refresh_token}, {expires_at}", PrintColors.BRIGHT_PURPLE)
+        save_config()
+    else:
+        print_to_logs(f"Failed to refresh Spotify token: {response.status_code}", PrintColors.YELLOW)
+        print_to_logs(f"Response: {response}", PrintColors.WHITE)
+        start_spotify_oauth_flow()
+
 
 
 def generate_config_file():
@@ -167,6 +186,7 @@ def generate_config_file():
     config.set('twitch-token', 'access_token', '')
     config.set('twitch-token', 'refresh_token', '')
     config.set('twitch-token', 'expires_at', '')
+    save_config()
 
 
 # async def shutdown():
@@ -253,11 +273,14 @@ async def currently_playing():
             </style>
         </head>
         <body>
-            <h1>Currently Playing</h1>
-            <p><strong>Track:</strong> {track_name}</p>
-            <p><strong>Artist:</strong> {artist_name}</p>
-            <p><strong>Album:</strong> {album_name}</p>
-            <img src="{album_image_url}" alt="Album art" class="album-art" />
+            <div>
+            <div>
+                <h1>Currently Playing</h1>
+                <p><strong>Track:</strong> {track_name}</p>
+                <p><strong>Artist:</strong> {artist_name}</p>
+                <p><strong>Album:</strong> {album_name}</p>
+                <img src="{album_image_url}" alt="Album art" class="album-art" />
+            </div>
         </body>
         </html>
         '''
@@ -324,31 +347,36 @@ async def callback_twitch():
             '''
 
 
-def check_twitch():
+async def check_twitch():
     global TASKS
     if TASKS["bot"]["instance"] is None:
-        print_to_logs("No bot istance")
+        print_to_logs("No bot istance", PrintColors.RED)
         bot = TwitchBot()
         TASKS["bot"]["instance"] = bot
-    if (not config.get("twitch-token", "expires_at") or
+    if config.get('twitch-token', 'expires_at'):
+        if config.get('twitch-token', 'expires_at') == "None":
+            config.set('twitch-token', 'expires_at', "")
+        elif int(config.get('twitch-token', 'expires_at')) < int(time.time()):
+            if TASKS["bot"]["task"] is not None:
+                TASKS["bot"]["task"].cancel()
+            print_to_logs("Expired Twitch Token", PrintColors.YELLOW)
+            update_bot_token()
+    elif (not config.get("twitch-token", "expires_at") or
             not config.get("twitch-token","refresh_token") or
             not config.get("twitch-token", 'access_token')):
-        print_to_logs("error config not found")
+        print_to_logs("error config not found", PrintColors.RED)
         start_twitch_oauth_flow()
-    elif config.get('twitch-token', 'expires_at'):
-        if int(config.get('twitch-token', 'expires_at')) < int(time.time()):
-            update_bot_token()
     if TASKS["bot"]["task"] is None:
-        print_to_logs("Creating TwitchBot Task")
+        print_to_logs("Creating TwitchBot Task", PrintColors.YELLOW)
         TASKS["bot"]["task"] = asyncio.create_task(TASKS["bot"]["instance"].start())
     else:
-        print_to_logs("Twitch is OK!")
+        print_to_logs("Twitch is OK!", PrintColors.GREEN)
 
 
-def check_spotify():
+async def check_spotify():
     global TASKS
     if TASKS["auth_manager"] is None:
-        print_to_logs("No auth manager")
+        print_to_logs("No auth manager", PrintColors.RED)
         TASKS["auth_manager"] = SpotifyOAuth(client_id=config.get("spotify", "client_id"),
                                              client_secret=config.get("spotify", "client_secret"),
                                              redirect_uri=config.get("spotify", "redirect_uri"),
@@ -356,25 +384,25 @@ def check_spotify():
     if (not config.get("spotify-token", "expires_at") or
             not config.get("spotify-token", "refresh_token") or
             not config.get("spotify-token", 'access_token')):
-        print_to_logs("No Token")
+        print_to_logs("No Token", PrintColors.RED)
         start_spotify_oauth_flow()
     if config.get("spotify-token", 'expires_at') and TASKS["auth_manager"].is_token_expired({"expires_at": int(config.get("spotify-token", 'expires_at'))}):
-        print_to_logs("Expired Token")
-        start_spotify_oauth_flow()
+        print_to_logs("Expired Spotify Token", PrintColors.YELLOW)
+        await refresh_spotify_token()
     else:
-        print_to_logs("Spotify is OK!")
+        print_to_logs("Spotify is OK!", PrintColors.GREEN)
 
 
 async def recurring_task(interval):
-    print_to_logs("Started reoccurring task")
+    print_to_logs("Started reoccurring task", PrintColors.BRIGHT_PURPLE)
     while True:
         # Twitch check
-        print_to_logs("Twitch sanity check!")
-        check_twitch()
+        print_to_logs("Twitch sanity check!", PrintColors.BRIGHT_PURPLE)
+        await check_twitch()
 
         # Spotify check
-        print_to_logs("Spotify sanity check!")
-        check_spotify()
+        print_to_logs("Spotify sanity check!", PrintColors.BRIGHT_PURPLE)
+        await check_spotify()
         # Wait for 'interval' seconds before running the task again
         await asyncio.sleep(interval)
 
@@ -386,35 +414,37 @@ async def main():
                                     ssl_keyfile=resource_path('localhost.ecc.key'),
                                     loop="asyncio", log_level="info")
     server = uvicorn.Server(config=uvicorn_config)
-    check_twitch()
-    check_spotify()
+    await check_twitch()
+    await check_spotify()
     # Start the Uvicorn server asynchronously
     quart_task = asyncio.create_task(server.serve())
     TASKS["quart"] = quart_task
-    print_to_logs("Quart Task Created")
+    print_to_logs("Quart Task Created", PrintColors.BRIGHT_PURPLE)
 
     updater_task = asyncio.create_task(recurring_task(300))
     TASKS["updater"] = updater_task
-    print_to_logs("Updater Task Created")
-    await asyncio.gather(TASKS["quart"], TASKS["updater"], TASKS["bot"]["task"])
+    print_to_logs("Updater Task Created", PrintColors.BRIGHT_PURPLE)
+    time.sleep(1)
+    await asyncio.gather(TASKS["quart"], TASKS["updater"])
 
-print_to_logs("Checking config.ini file existance")
+print_to_logs("Checking config.ini file existance", PrintColors.BRIGHT_PURPLE)
 if os.path.exists(CONFIG_FILE):
-    print_to_logs("File found! Loading...")
+    print_to_logs("File found! Loading...", PrintColors.GREEN)
     config.read(CONFIG_FILE)
 else:
-    print_to_logs("Config file not found")
-    print_to_logs("Creating new one and generatic necessary secrets")
+    print_to_logs("Config file not found", PrintColors.RED)
+    print_to_logs("Creating new one and generatic necessary secrets", PrintColors.YELLOW)
     generate_config_file()
 
-print_to_logs("Checking commands.json file existance")
+print_to_logs("Checking commands.json file existance", PrintColors.BRIGHT_PURPLE)
 if os.path.exists(COMMANDS_FILE):
-    print_to_logs("File found! Loading...")
+    print_to_logs("File found! Loading...", PrintColors.GREEN)
     config.read(CONFIG_FILE)
 else:
-    print_to_logs("Commands file not found")
-    print_to_logs("Creating new one with no commands")
-    generate_config_file()
+    print_to_logs("Commands file not found", PrintColors.RED)
+    print_to_logs("Creating new one with no commands", PrintColors.WHITE)
+    with open("commands.json", "w", encoding="utf-8") as f:
+        f.write(json.dumps({"example": "[sender] this is an example command"}))
 
 # Main Function
 if __name__ == "__main__":
@@ -424,7 +454,7 @@ if __name__ == "__main__":
     if key:
         app.secret_key = key
     else:
-        print_to_logs("App secret_key is missing in config.ini. Generating a new one.")
+        print_to_logs("App secret_key is missing in config.ini. Generating a new one.", PrintColors.RED)
         app.secret_key = secrets.token_hex(16)
         config.set('app', 'secret_key', app.secret_key)
         save_config()

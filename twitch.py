@@ -1,35 +1,22 @@
 import configparser
-import datetime
 import json
 import os.path
 import re
 import spotipy
 import string
-from twitchio.ext import commands
-from datetime import datetime
 
+from twitchio.ext import commands
+from logger import print_to_logs, PrintColors
 
 CONFIG_FILE = 'config.ini'
 COMMANDS_FILE = 'commands.json'
 config = configparser.ConfigParser()
 KEYWORD_PATTERN = r'\[([^\]]+)\]'
-debug = True
+url_pattern = r'\b(?:https?|ftp):\/\/[\w\-]+(\.[\w\-]+)+[/\w\-?=&#%]*\b'
 
 
 def is_user_allowed(author):
     return author.is_subscriber or author.is_vip or author.is_mod or author.is_broadcaster
-
-
-def print_to_logs(message):
-    # Get current timestamp in the specified format
-    timestamp = datetime.now().strftime('%d/%m/%y - %H:%M')
-    # Format the log entry
-    log_entry = f"{timestamp}: {message}\n"
-    if debug:
-        print(log_entry.strip("\n"))
-    # Open the log file and append the log entry
-    with open("log.txt", 'a', 'utf-8') as file:
-        file.write(log_entry)
 
 
 def replace_keywords(message: string, ctx: commands.Context):
@@ -40,11 +27,27 @@ def replace_keywords(message: string, ctx: commands.Context):
                 return re.sub(KEYWORD_PATTERN, ctx.author.mention, message)
 
 
+def get_player():
+    sp = spotipy.Spotify(auth=config.get("spotify-token", "access_token"))
+    for a in sp.devices()["devices"]:
+        if a["is_active"]:
+            return sp, a['id']
+        else:
+            sp.start_playback(a["id"])
+            return sp, a['id']
+
+
+def print_queue_to_file(queue):
+    with open("queue.json", "w", encoding="utf-8") as f:
+        f.write(json.dumps(queue))
+
+
 class TwitchBot(commands.Bot):
     def __init__(self):
         config.read(CONFIG_FILE)
-        print_to_logs(f"Connecting to {config.get('twitch', 'channel')}")
+        print_to_logs(f"Connecting to {config.get('twitch', 'channel')}", PrintColors.GREEN)
         self.channel = config.get('twitch', 'channel')
+        self.queue = []
         super().__init__(token=config.get('twitch-token', 'access_token'), prefix="!", initial_channels=["#" + self.channel])
         self.load_commands()
 
@@ -66,7 +69,7 @@ class TwitchBot(commands.Bot):
     async def event_ready(self):
         # Notify us when everything is ready!
         # We are logged in and ready to chat and use commands...
-        print_to_logs(f'Logged in as | {self.nick} to {self.channel}')
+        print_to_logs(f'Logged in as | {self.nick} to {self.channel}', PrintColors.GREEN)
         # print(f'User id is | {self.user_id}')
 
     async def event_message(self, message):
@@ -76,7 +79,7 @@ class TwitchBot(commands.Bot):
             return
         # print_to_logs(json.dumps(message.tags))
         # Print the contents of our message to console...
-        print_to_logs(f"{message.author.name}, {message.content}")
+        print_to_logs(f"{message.author.name}, {message.content}", PrintColors.BRIGHT_PURPLE)
         # Since we have commands and are overriding the default `event_message`
         # We must let the bot know we want to handle and invoke our commands...
         await self.handle_commands(message)
@@ -91,30 +94,50 @@ class TwitchBot(commands.Bot):
     @commands.command()
     async def play(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
-            sp = spotipy.Spotify(auth=config.get("spotify-token", "access_token"))
-            for a in sp.devices()["devices"]:
-                if a["is_active"]:
-                    sp.start_playback(a["id"])
-                    await ctx.send('Played!')
+            sp, sp_id = get_player()
+            sp.start_playback(sp_id)
+            print_to_logs("Resumed!", PrintColors.YELLOW)
+            await ctx.send('Resumed!')
 
     @commands.command()
     async def pause(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
-            sp = spotipy.Spotify(auth=config.get("spotify-token", "access_token"))
-            for a in sp.devices()["devices"]:
-                if a["is_active"]:
-                    sp.pause_playback(a["id"])
-                    await ctx.send('Paused!')
+            sp, sp_id = get_player()
+            sp.pause_playback(sp_id)
+            print_to_logs("Paused!", PrintColors.YELLOW)
+            await ctx.send('Paused!')
+
+    @commands.command()
+    async def skip(self, ctx: commands.Context):
+        if is_user_allowed(ctx.author):
+            sp, sp_id = get_player()
+            sp.next(sp_id)
+            self.queue.pop(0)
+            print_to_logs("Skipped!", PrintColors.YELLOW)
+            await ctx.send('Skipped!')
 
     @commands.command()
     async def sr(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
-            sp = spotipy.Spotify(auth=config.get("spotify-token", "access_token"))
-
+            sp, _ = get_player()
             song = ctx.message.content.strip("!sr")
-            song = song.split("/")[-1]
-            if "?" in song:
-                song = song.split("?")[0]
-            sp.add_to_queue(f"spotify:track:{song}")
-            await ctx.send('Added!')
+
+            if re.search(url_pattern, song):
+                song = song.split("/")[-1]
+                if "?" in song:
+                    song = song.split("?")[0]
+                query = sp.track(song)
+                sp.add_to_queue(f"spotify:track:{song}")
+            else:
+                query = sp.search(song, type="track")
+                query = query["tracks"]["items"][0]
+                sp.add_to_queue(query["uri"])
+            self.queue.append({
+                "title": f'{query["name"]} - {query["artists"][0]["name"]}',
+                "requested_by": f"{ctx.author.display_name}",
+                "duration": query["duration_ms"]
+            })
+            print_queue_to_file(self.queue)
+            print_to_logs(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]} alla coda!', PrintColors.BRIGHT_PURPLE)
+            await ctx.send(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]}!')
 
