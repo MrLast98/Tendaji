@@ -33,8 +33,7 @@ def get_player():
         if a["is_active"]:
             return sp, a['id']
         else:
-            sp.start_playback(a["id"])
-            return sp, a['id']
+            return None, None
 
 
 def print_queue_to_file(queue):
@@ -64,6 +63,7 @@ class TwitchBot(commands.Bot):
                 # Dynamically set the name of the handler to match the command
                 command_handler.__name__ = command
                 # Use the command decorator to register the command
+                print_to_logs(f"Registered command {command}", PrintColors.BRIGHT_PURPLE)
                 self.command(name=command)(command_handler)
 
     async def event_ready(self):
@@ -95,49 +95,60 @@ class TwitchBot(commands.Bot):
     async def play(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
             sp, sp_id = get_player()
-            sp.start_playback(sp_id)
-            print_to_logs("Resumed!", PrintColors.YELLOW)
-            await ctx.send('Resumed!')
+            if sp is not None and sp_id is not None:
+                sp.start_playback(sp_id)
+                print_to_logs("Resumed!", PrintColors.YELLOW)
+                await ctx.send('Resumed!')
+            else:
+                await ctx.send('No player found - Please start playing a song before requesting!')
 
     @commands.command()
     async def pause(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
             sp, sp_id = get_player()
-            sp.pause_playback(sp_id)
-            print_to_logs("Paused!", PrintColors.YELLOW)
-            await ctx.send('Paused!')
+            if sp is not None and sp_id is not None:
+                sp.pause_playback(sp_id)
+                print_to_logs("Paused!", PrintColors.YELLOW)
+                await ctx.send('Paused!')
+            else:
+                await ctx.send('No player found - Please start playing a song before requesting!')
 
     @commands.command()
     async def skip(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
             sp, sp_id = get_player()
-            sp.next(sp_id)
-            self.queue.pop(0)
-            print_to_logs("Skipped!", PrintColors.YELLOW)
-            await ctx.send('Skipped!')
+            if sp is not None and sp_id is not None:
+                sp.next(sp_id)
+                self.queue.pop(0)
+                print_to_logs("Skipped!", PrintColors.YELLOW)
+                await ctx.send('Skipped!')
+            else:
+                await ctx.send('No player found - Please start playing a song before requesting!')
 
     @commands.command()
     async def sr(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
             sp, _ = get_player()
-            song = ctx.message.content.strip("!sr")
+            if sp is not None:
+                song = ctx.message.content.strip("!sr")
 
-            if re.search(url_pattern, song):
-                song = song.split("/")[-1]
-                if "?" in song:
-                    song = song.split("?")[0]
-                query = sp.track(song)
-                sp.add_to_queue(f"spotify:track:{song}")
+                if re.search(url_pattern, song):
+                    song = song.split("/")[-1]
+                    if "?" in song:
+                        song = song.split("?")[0]
+                    query = sp.track(song)
+                    sp.add_to_queue(f"spotify:track:{song}")
+                else:
+                    query = sp.search(song, type="track")
+                    query = query["tracks"]["items"][0]
+                    sp.add_to_queue(query["uri"])
+                self.queue.append({
+                    "title": f'{query["name"]} - {query["artists"][0]["name"]}',
+                    "requested_by": f"{ctx.author.display_name}",
+                    "duration": query["duration_ms"]
+                })
+                print_queue_to_file(self.queue)
+                print_to_logs(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]} alla coda!', PrintColors.BRIGHT_PURPLE)
+                await ctx.send(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]}!')
             else:
-                query = sp.search(song, type="track")
-                query = query["tracks"]["items"][0]
-                sp.add_to_queue(query["uri"])
-            self.queue.append({
-                "title": f'{query["name"]} - {query["artists"][0]["name"]}',
-                "requested_by": f"{ctx.author.display_name}",
-                "duration": query["duration_ms"]
-            })
-            print_queue_to_file(self.queue)
-            print_to_logs(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]} alla coda!', PrintColors.BRIGHT_PURPLE)
-            await ctx.send(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]}!')
-
+                await ctx.send('No player found - Please start playing a song before requesting!')

@@ -3,6 +3,7 @@ from datetime import datetime
 
 
 debug = not os.path.exists(".debug")
+log_queue = []
 
 
 class PrintColors:
@@ -13,20 +14,41 @@ class PrintColors:
     BRIGHT_PURPLE = '\033[95m'
 
 
-def print_to_logs(message, color):
+def check_log_file():
     current_date = datetime.now().strftime("%d-%m-%Y")
     file_name = f"logs-{current_date}.txt"
     if not os.path.exists(file_name):
         with open(file_name, "w", encoding="utf-8") as f:
-            f.write(f"LOGS CREATION - {file_name}")
-        print_to_logs(f"LOGS CREATED  - {file_name}", PrintColors.YELLOW)
+            f.write(f"LOGS CREATION - {file_name}\n")
 
+
+def print_to_logs(message, color):
+    global log_queue
+    current_date = datetime.now().strftime("%d-%m-%Y")
+    file_name = f"logs-{current_date}.txt"
+    # check_log_file()
+    if not os.path.exists(file_name):
+        if len(log_queue) == 0:
+            log_queue.append((f"LOGS CREATED  - {file_name}", PrintColors.YELLOW))
+        log_queue.append((message, color))
+        return
+    elif os.path.exists(file_name) and len(log_queue) > 0:
+        for msg, msg_color in log_queue:
+            new_print(msg, msg_color)
+        log_queue = []
+    new_print(message, color)
+
+
+def new_print(message, color):
     # Get current timestamp in the specified format
     timestamp = datetime.now().strftime('%d/%m/%y - %H:%M')
+    log_entry = f"{timestamp}: {message}\n"
     # Format the log entry
-    log_entry = f"{timestamp}: {color}{message}{PrintColors.WHITE}\n"
+    message = f"{timestamp}: {color}{message}{PrintColors.WHITE}"
+    current_date = datetime.now().strftime("%d-%m-%Y")
+    file_name = f"logs-{current_date}.txt"
     if debug:
-        print(log_entry.strip("\n"))
+        print(message)
     # Open the log file and append the log entry
-    with open("logs.txt", 'a', encoding='utf-8') as file:
+    with open(file_name, 'a', encoding='utf-8') as file:
         file.write(log_entry)
