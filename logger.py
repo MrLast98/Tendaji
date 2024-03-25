@@ -42,9 +42,10 @@ def print_to_logs(message, color):
 def new_print(message, color):
     # Get current timestamp in the specified format
     timestamp = datetime.now().strftime('%d/%m/%y - %H:%M')
-    log_entry = f"{timestamp}: {message}\n"
+    level = get_level_from_color(color)
+    log_entry = f"{timestamp} | {level}: {message}\n"
     # Format the log entry
-    message = f"{timestamp}: {color}{message}{PrintColors.WHITE}"
+    message = f"{timestamp} | {color}{level}{PrintColors.WHITE}: {color}{message}{PrintColors.WHITE}"
     current_date = datetime.now().strftime("%d-%m-%Y")
     file_name = f"logs-{current_date}.txt"
     if debug:
@@ -52,3 +53,15 @@ def new_print(message, color):
     # Open the log file and append the log entry
     with open(file_name, 'a', encoding='utf-8') as file:
         file.write(log_entry)
+
+
+def get_level_from_color(color):
+    match color:
+        case PrintColors.RED:
+            return "ERROR"
+        case PrintColors.YELLOW:
+            return "WARNING"
+        case PrintColors.GREEN:
+            return "SUCCESS"
+        case PrintColors.BRIGHT_PURPLE:
+            return "INFO"

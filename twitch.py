@@ -124,7 +124,6 @@ class TwitchBot(commands.Bot):
 
     async def event_command_error(self, context: Context, error: Exception) -> None:
         print_to_logs(f"ERROR: Missing command. {error }", PrintColors.RED)
-        return
 
     @commands.command()
     async def play(self, ctx: commands.Context):
@@ -178,7 +177,8 @@ class TwitchBot(commands.Bot):
                     query = query["tracks"]["items"][0]
                     sp.add_to_queue(query["uri"])
                 self.queue.append({
-                    "title": f'{query["name"]} - {query["artists"][0]["name"]}',
+                    "title": f'{query["name"]}',
+                    "author": f"{query["artists"][0]["name"]}",
                     "requested_by": f"{ctx.author.display_name}",
                     "duration": query["duration_ms"]
                 })

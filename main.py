@@ -11,7 +11,7 @@ from datetime import datetime
 from logger import print_to_logs, PrintColors, check_log_file
 from manager import Manager
 from quart import Quart, request, redirect, session
-from twitch import retrieve_token_info, start_twitch_oauth_flow
+from twitch import retrieve_token_info, start_twitch_oauth_flow, print_queue_to_file
 
 # pyinstaller --onefile --add-data "localhost.ecc.crt;." --add-data "localhost.ecc.key;." main.py
 
@@ -19,6 +19,7 @@ from twitch import retrieve_token_info, start_twitch_oauth_flow
 # Configuration and Flask App
 CONFIG_FILE = 'config.ini'
 COMMANDS_FILE = 'commands.json'
+QUEUE_FILE = 'queue.json'
 LOGS_FILE = f"logs-{datetime.now().strftime("%d-%m-%Y")}.txt"
 app = Quart(__name__)
 app.config['SESSION_COOKIE_NAME'] = 'spotify-login-session'
@@ -102,6 +103,14 @@ async def shutdown():
     manager.quart.cancel()
     await asyncio.gather(manager.twitch_bot.get("task"), manager.updater, manager.quart, return_exceptions=True)
     print_to_logs("Cleanup complete. Exiting...", PrintColors.BRIGHT_PURPLE)
+
+
+def update_queue(track_name, artist_name):
+    with open("queue.json", "r", encoding="utf-8") as f:
+        queue = json.loads(f.read())
+    while queue and queue[0]["title"] != track_name and queue[0]["author"] != artist_name and len(queue) > 0:
+        queue.pop(0)
+    print_queue_to_file(queue)
 #
 #
 # def signal_handler(loop):
@@ -144,47 +153,6 @@ async def callback():
             '''
 
 
-@app.route('/currently_playing')
-async def currently_playing():
-    global manager
-    sp = spotipy.Spotify(auth=config.get("spotify-token", "access_token"),)
-    track = sp.current_playback()
-    if track is not None:
-        track_name = track['item']['name']
-        artist_name = track['item']['artists'][0]['name']
-        album_name = track['item']['album']['name']
-        album_image_url = track['item']['album']['images'][0]['url'] if track['item']['album'][
-            'images'] else "No image available"
-        refresh_rate = 30
-
-        html_content = f'''
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Currently Playing</title>
-            <meta http-equiv="refresh" content="{refresh_rate}">
-            <style>
-                body {{ font-family: Arial, sans-serif; }}
-                .album-art {{ width: 300px; }}
-            </style>
-        </head>
-        <body>
-            <div>
-            <div>
-                <h1>Currently Playing</h1>
-                <p><strong>Track:</strong> {track_name}</p>
-                <p><strong>Artist:</strong> {artist_name}</p>
-                <p><strong>Album:</strong> {album_name}</p>
-                <img src="{album_image_url}" alt="Album art" class="album-art" />
-            </div>
-        </body>
-        </html>
-        '''
-        return html_content
-    else:
-        return "No track is currently playing."
-
-
 @app.route('/callback_twitch')
 async def callback_twitch():
     global manager
@@ -220,6 +188,55 @@ async def callback_twitch():
             </body>
             </html>
         '''
+
+
+@app.route('/currently_playing')
+async def currently_playing():
+    global manager
+    sp = spotipy.Spotify(auth=config.get("spotify-token", "access_token"),)
+    track = sp.current_playback()
+    if track is not None:
+        track_name = track['item']['name']
+        artist_name = track['item']['artists'][0]['name']
+
+        album_name = track['item']['album']['name']
+        album_image_url = track['item']['album']['images'][0]['url'] if track['item']['album'][
+            'images'] else "No image available"
+        track_duration = int(track['item']["duration_ms"])
+        progress = int(track["progress_ms"])
+        if track_duration - progress >= 30000:
+            refresh_rate = 30
+        else:
+            refresh_rate = (track_duration - progress) / 1000 + 1  # Convert to seconds and add 1
+            update_queue(track_name, artist_name)
+        next_refresh = int(time.time()) + refresh_rate
+        html_content = f'''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Currently Playing</title>
+            <meta http-equiv="refresh" content="{refresh_rate}">
+            <style>
+                body {{ font-family: Arial, sans-serif; }}
+                .album-art {{ width: 300px; }}
+            </style>
+        </head>
+        <body>
+            <div>
+            <div>
+                <h1>Currently Playing</h1>
+                <p><strong>Track:</strong> {track_name}</p>
+                <p><strong>Artist:</strong> {artist_name}</p>
+                <p><strong>Album:</strong> {album_name}</p>
+                <p><strong>Next Refresh:</strong> {datetime.fromtimestamp(next_refresh).strftime('%H:%M:%S')}</p>
+                <img src="{album_image_url}" alt="Album art" class="album-art" />
+            </div>
+        </body>
+        </html>
+        '''
+        return html_content
+    else:
+        return "No track is currently playing."
 
 
 async def check_twitch():
@@ -323,6 +340,10 @@ def startup_checks():
         config.set('spotify-token', 'refresh_token', "")
         config.set('spotify-token', 'expires_at', "")
         save_config()
+
+    if os.path.exists(QUEUE_FILE):
+        os.remove(QUEUE_FILE)
+        print_to_logs("Cleared queue", PrintColors.BRIGHT_PURPLE)
 
     print_to_logs("Checking commands file existence", PrintColors.BRIGHT_PURPLE)
     if os.path.exists(COMMANDS_FILE):
