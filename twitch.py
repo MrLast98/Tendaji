@@ -4,15 +4,24 @@ import os.path
 import re
 import spotipy
 import string
+from requests import post
+from time import time
 
 from twitchio.ext import commands
+from twitchio.ext.commands import Context
+
 from logger import print_to_logs, PrintColors
+from urllib.parse import urlencode
+from webbrowser import open as wbopen
 
 CONFIG_FILE = 'config.ini'
 COMMANDS_FILE = 'commands.json'
 config = configparser.ConfigParser()
 KEYWORD_PATTERN = r'\[([^\]]+)\]'
 url_pattern = r'\b(?:https?|ftp):\/\/[\w\-]+(\.[\w\-]+)+[/\w\-?=&#%]*\b'
+TWITCH_AUTHORIZATION_URL = 'https://id.twitch.tv/oauth2/authorize'
+TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
+scope_twitch = 'chat:read chat:edit'
 
 
 def is_user_allowed(author):
@@ -39,6 +48,35 @@ def get_player():
 def print_queue_to_file(queue):
     with open("queue.json", "w", encoding="utf-8") as f:
         f.write(json.dumps(queue))
+
+
+def start_twitch_oauth_flow():
+    params = {
+        'client_id': config.get('twitch', 'client_id'),
+        'redirect_uri': 'https://localhost:5000/callback_twitch',
+        'response_type': 'code',
+        'scope': scope_twitch
+    }
+    url = f"{TWITCH_AUTHORIZATION_URL}?{urlencode(params)}"
+    wbopen(url)
+
+
+def retrieve_token_info(code):
+    payload = {
+        'client_id': config.get('twitch', 'client_id'),
+        'client_secret': config.get('twitch', 'client_secret'),
+        'code': code,
+        'grant_type': 'authorization_code',
+        'redirect_uri': 'https://localhost:5000/callback_twitch'
+    }
+    response = post(TWITCH_TOKEN_URL, data=payload)
+    response_json = response.json()
+    access_token = response_json.get('access_token')
+    refresh_token = response_json.get('refresh_token')
+    expires_in = response_json.get('expires_in')
+    # Calculate the expiration timestamp and save it
+    expires_at = int(time()) + expires_in
+    return access_token, refresh_token, expires_at
 
 
 class TwitchBot(commands.Bot):
@@ -84,12 +122,9 @@ class TwitchBot(commands.Bot):
         # We must let the bot know we want to handle and invoke our commands...
         await self.handle_commands(message)
 
-    # @commands.command()
-    # async def generic_command(self, ctx: commands.Context, message: string):
-    #     if ctx.author.is_subscriber or ctx.author.is_vip or ctx.author.is_mod:
-    #         await ctx.send(message)
-    #     else:
-    #         print(f"Ignored {ctx.message}")
+    async def event_command_error(self, context: Context, error: Exception) -> None:
+        print_to_logs(f"ERROR: Missing command. {error }", PrintColors.RED)
+        return
 
     @commands.command()
     async def play(self, ctx: commands.Context):
