@@ -1,3 +1,4 @@
+import configparser
 from spotipy import SpotifyOAuth
 from twitch import TwitchBot
 from asyncio import create_task
@@ -10,21 +11,30 @@ scope_spotify = "user-read-playback-state user-modify-playback-state"
 SPOTIFY_AUTHORIZATION_URL = 'https://accounts.spotify.com/authorize'
 OAUTH_SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token'
 TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
+CONFIG_FILE = 'config.ini'
 
 
 class Manager:
-    def __init__(self, config):
+    def __init__(self):
         self.twitch_bot = {
             "task": None,
             "instance": None
         }
-        self.config = config
-        self.auth_manager = SpotifyOAuth(client_id=self.config.get('spotify', 'client_id', fallback=None),
+        self.quart = None
+        self.updater = None
+
+    @property
+    def config(self):
+        config = configparser.ConfigParser()
+        config.read(CONFIG_FILE)
+        return config
+
+    @property
+    def auth_manager(self):
+        return SpotifyOAuth(client_id=self.config.get('spotify', 'client_id', fallback=None),
                                          client_secret=self.config.get('spotify', 'client_secret', fallback=None),
                                          redirect_uri=self.config.get('spotify', 'redirect_uri', fallback=None),
                                          scope=scope_spotify)
-        self.quart = None
-        self.updater = None
 
     def create_new_bot(self):
         if self.twitch_bot["task"]:

@@ -193,7 +193,7 @@ async def callback_twitch():
 @app.route('/currently_playing')
 async def currently_playing():
     global manager
-    sp = spotipy.Spotify(auth=config.get("spotify-token", "access_token"),)
+    sp = spotipy.Spotify(auth=config.get("spotify-token", "access_token"))
     track = sp.current_playback()
     if track is not None:
         track_name = track['item']['name']
@@ -208,7 +208,8 @@ async def currently_playing():
             refresh_rate = 30
         else:
             refresh_rate = (track_duration - progress) / 1000 + 1  # Convert to seconds and add 1
-            update_queue(track_name, artist_name)
+            if os.path.exists(QUEUE_FILE):
+                update_queue(track_name, artist_name)
         next_refresh = int(time.time()) + refresh_rate
         html_content = f'''
         <!DOCTYPE html>
@@ -297,7 +298,7 @@ async def recurring_task(interval):
 async def main():
     global manager
     try:
-        manager = Manager(config)
+        manager = Manager()
         uvicorn_config = uvicorn.Config(app, host="localhost", port=5000,
                                         ssl_certfile=resource_path('localhost.ecc.crt'),
                                         ssl_keyfile=resource_path('localhost.ecc.key'),
@@ -313,7 +314,6 @@ async def main():
         updater_task = asyncio.create_task(recurring_task(300))
         manager.updater = updater_task
         print_to_logs("Updater Task Created", PrintColors.BRIGHT_PURPLE)
-        time.sleep(1)
         await asyncio.gather(manager.quart, manager.updater)
     except KeyboardInterrupt:
         print_to_logs("KeyboardInterrupt received. Shutting down...", PrintColors.YELLOW)

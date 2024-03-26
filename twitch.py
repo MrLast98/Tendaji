@@ -37,6 +37,7 @@ def replace_keywords(message: string, ctx: commands.Context):
 
 
 def get_player():
+    config.read(CONFIG_FILE)
     sp = spotipy.Spotify(auth=config.get("spotify-token", "access_token"))
     for a in sp.devices()["devices"]:
         if a["is_active"]:
