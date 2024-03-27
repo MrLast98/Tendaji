@@ -15,14 +15,6 @@ class PrintColors:
     BLUE = '\033[95m'
 
 
-def check_log_file():
-    current_date = datetime.now().strftime("%d-%m-%Y")
-    file_name = f"logs-{current_date}.txt"
-    if not os.path.exists(file_name):
-        with open(file_name, "w", encoding="utf-8") as f:
-            f.write(f"LOGS CREATION - {file_name}\n")
-
-
 def print_to_logs(message, color):
     global log_queue
     current_date = datetime.now().strftime("%d-%m-%Y")
