@@ -39,7 +39,7 @@ class Manager:
     def create_new_bot(self):
         if self.twitch_bot["task"]:
             self.twitch_bot["task"] = None
-        self.twitch_bot["instance"] = TwitchBot()
+        self.twitch_bot["instance"] = TwitchBot(self)
         self.twitch_bot["task"] = create_task(self.twitch_bot["instance"].start())
 
     def create_new_auth_manager(self):

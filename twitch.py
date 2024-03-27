@@ -81,11 +81,12 @@ def retrieve_token_info(code):
 
 
 class TwitchBot(commands.Bot):
-    def __init__(self):
+    def __init__(self, manager):
         config.read(CONFIG_FILE)
         print_to_logs(f"Connecting to {config.get('twitch', 'channel')}", PrintColors.GREEN)
         self.channel = config.get('twitch', 'channel')
         self.queue = []
+        self.manager = manager
         super().__init__(token=config.get('twitch-token', 'access_token'), prefix="!", initial_channels=["#" + self.channel])
         self.load_commands()
 
@@ -125,6 +126,13 @@ class TwitchBot(commands.Bot):
 
     async def event_command_error(self, context: Context, error: Exception) -> None:
         print_to_logs(f"ERROR: Missing command. {error }", PrintColors.RED)
+
+
+    @property
+    def sp(self):
+        if config.get("spotify-token", 'expires_at') and self.manager.auth_manager.is_token_expired(
+            {"expires_at": int(config.get("spotify-token", 'expires_at'))}):
+
 
     @commands.command()
     async def play(self, ctx: commands.Context):
