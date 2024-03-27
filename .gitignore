@@ -2,3 +2,5 @@
 /.idea/
 /dist/
 /build/
+localhost.ecc.crt
+localhost.ecc.key

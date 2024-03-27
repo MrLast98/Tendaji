@@ -42,12 +42,6 @@ class Manager:
         self.twitch_bot["instance"] = TwitchBot(self)
         self.twitch_bot["task"] = create_task(self.twitch_bot["instance"].start())
 
-    def create_new_auth_manager(self):
-        self.auth_manager = SpotifyOAuth(client_id=self.config.get('spotify', 'client_id', fallback=None),
-                                         client_secret=self.config.get('spotify', 'client_secret', fallback=None),
-                                         redirect_uri=self.config.get('spotify', 'redirect_uri', fallback=None),
-                                         scope=scope_spotify)
-
     async def update_twitch_token(self):
         params = {
             'grant_type': 'refresh_token',
@@ -74,6 +68,11 @@ class Manager:
         auth_url = self.auth_manager.get_authorize_url()
         wbopen(auth_url)
 
+    def save_config(self):
+        with open(CONFIG_FILE, 'w') as configfile:
+            self.config.write(configfile)
+        print_to_logs("Configuration saved.", PrintColors.BRIGHT_PURPLE)
+
     @staticmethod
     async def fetch(session, url, data=None):
         async with session.request('POST', url, data=data) as response:
@@ -91,6 +90,7 @@ class Manager:
             self.config.set("spotify-token", "expires_at", str(expires_at))
             print_to_logs(f"New Token Acquired! {access_token}, {refresh_token}, {expires_at}",
                           PrintColors.BRIGHT_PURPLE)
+            self.save_config()
         else:
             print_to_logs(f"Failed to refresh Spotify token: {response.status}", PrintColors.YELLOW)
             print_to_logs(f"Response: {response}", PrintColors.WHITE)

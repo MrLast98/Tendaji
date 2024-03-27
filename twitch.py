@@ -7,6 +7,7 @@ import string
 from requests import post
 from time import time
 
+from spotipy import SpotifyException
 from twitchio.ext import commands
 from twitchio.ext.commands import Context
 
@@ -36,10 +37,15 @@ def replace_keywords(message: string, ctx: commands.Context):
                 return re.sub(KEYWORD_PATTERN, ctx.author.mention, message)
 
 
-def get_player():
+async def get_player(manager):
     config.read(CONFIG_FILE)
     sp = spotipy.Spotify(auth=config.get("spotify-token", "access_token"))
-    for a in sp.devices()["devices"]:
+    try:
+        devices = sp.devices()
+    except SpotifyException:
+        print_to_logs("Expired Spotify Token", PrintColors.YELLOW)
+        await manager.refresh_spotify_token()
+    for a in devices["devices"]:
         if a["is_active"]:
             return sp, a['id']
         else:
@@ -119,7 +125,7 @@ class TwitchBot(commands.Bot):
             return
         # print_to_logs(json.dumps(message.tags))
         # Print the contents of our message to console...
-        print_to_logs(f"{message.author.name}, {message.content}", PrintColors.BRIGHT_PURPLE)
+        print_to_logs(f"{message.author.name}, {message.content}", PrintColors.BLUE)
         # Since we have commands and are overriding the default `event_message`
         # We must let the bot know we want to handle and invoke our commands...
         await self.handle_commands(message)
@@ -127,17 +133,10 @@ class TwitchBot(commands.Bot):
     async def event_command_error(self, context: Context, error: Exception) -> None:
         print_to_logs(f"ERROR: Missing command. {error }", PrintColors.RED)
 
-
-    @property
-    def sp(self):
-        if config.get("spotify-token", 'expires_at') and self.manager.auth_manager.is_token_expired(
-            {"expires_at": int(config.get("spotify-token", 'expires_at'))}):
-
-
     @commands.command()
     async def play(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
-            sp, sp_id = get_player()
+            sp, sp_id = await get_player(self.manager)
             if sp is not None and sp_id is not None:
                 sp.start_playback(sp_id)
                 print_to_logs("Resumed!", PrintColors.YELLOW)
@@ -148,7 +147,7 @@ class TwitchBot(commands.Bot):
     @commands.command()
     async def pause(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
-            sp, sp_id = get_player()
+            sp, sp_id = await get_player(self.manager)
             if sp is not None and sp_id is not None:
                 sp.pause_playback(sp_id)
                 print_to_logs("Paused!", PrintColors.YELLOW)
@@ -159,7 +158,7 @@ class TwitchBot(commands.Bot):
     @commands.command()
     async def skip(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
-            sp, sp_id = get_player()
+            sp, sp_id = await get_player(self.manager)
             if sp is not None and sp_id is not None:
                 sp.next(sp_id)
                 self.queue.pop(0)
@@ -171,7 +170,7 @@ class TwitchBot(commands.Bot):
     @commands.command()
     async def sr(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
-            sp, _ = get_player()
+            sp, _ = await get_player(self.manager)
             if sp is not None:
                 song = ctx.message.content.strip("!sr")
 
@@ -187,7 +186,7 @@ class TwitchBot(commands.Bot):
                     sp.add_to_queue(query["uri"])
                 self.queue.append({
                     "title": f'{query["name"]}',
-                    "author": f"{query["artists"][0]["name"]}",
+                    "author": f"{query['artists'][0]['name']}",
                     "requested_by": f"{ctx.author.display_name}",
                     "duration": query["duration_ms"]
                 })

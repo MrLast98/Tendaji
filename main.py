@@ -11,7 +11,7 @@ from datetime import datetime
 from logger import print_to_logs, PrintColors, check_log_file
 from manager import Manager
 from quart import Quart, request, redirect, session
-from twitch import retrieve_token_info, start_twitch_oauth_flow, print_queue_to_file
+from twitch import retrieve_token_info, start_twitch_oauth_flow, print_queue_to_file, get_player
 
 # pyinstaller --onefile --add-data "localhost.ecc.crt;." --add-data "localhost.ecc.key;." main.py
 
@@ -20,7 +20,7 @@ from twitch import retrieve_token_info, start_twitch_oauth_flow, print_queue_to_
 CONFIG_FILE = 'config.ini'
 COMMANDS_FILE = 'commands.json'
 QUEUE_FILE = 'queue.json'
-LOGS_FILE = f"logs-{datetime.now().strftime("%d-%m-%Y")}.txt"
+LOGS_FILE = f"logs-{datetime.now().strftime('%d-%m-%Y')}.txt"
 app = Quart(__name__)
 app.config['SESSION_COOKIE_NAME'] = 'spotify-login-session'
 config = configparser.ConfigParser()
@@ -95,6 +95,7 @@ def generate_config_file():
 
 
 async def shutdown():
+    global manager
     """Gracefully shut down all tasks and save configurations."""
     print_to_logs("Initiating shutdown...", PrintColors.BRIGHT_PURPLE)
     save_config()
@@ -193,7 +194,7 @@ async def callback_twitch():
 @app.route('/currently_playing')
 async def currently_playing():
     global manager
-    sp = spotipy.Spotify(auth=config.get("spotify-token", "access_token"))
+    sp, _ = await get_player(manager)
     track = sp.current_playback()
     if track is not None:
         track_name = track['item']['name']
@@ -265,10 +266,7 @@ async def check_twitch():
 
 async def check_spotify():
     global manager
-    if manager.auth_manager is None:
-        print_to_logs("No auth manager", PrintColors.RED)
-        manager.create_new_auth_manager()
-    elif (not config.get("spotify-token", "expires_at") or
+    if (not config.get("spotify-token", "expires_at") or
             not config.get("spotify-token", "refresh_token") or
             not config.get("spotify-token", 'access_token')):
         print_to_logs("No Token", PrintColors.RED)
@@ -298,7 +296,6 @@ async def recurring_task(interval):
 async def main():
     global manager
     try:
-        manager = Manager()
         uvicorn_config = uvicorn.Config(app, host="localhost", port=5000,
                                         ssl_certfile=resource_path('localhost.ecc.crt'),
                                         ssl_keyfile=resource_path('localhost.ecc.key'),
@@ -358,6 +355,7 @@ def startup_checks():
 
 # Main Function
 if __name__ == "__main__":
+    manager = Manager()
     startup_checks()
     if not validate_config():
         setup()

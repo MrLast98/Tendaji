@@ -12,6 +12,7 @@ class PrintColors:
     GREEN = '\033[92m'
     WHITE = '\033[0m'
     BRIGHT_PURPLE = '\033[95m'
+    BLUE = '\033[95m'
 
 
 def check_log_file():
@@ -65,3 +66,5 @@ def get_level_from_color(color):
             return "SUCCESS"
         case PrintColors.BRIGHT_PURPLE:
             return "INFO"
+        case PrintColors.BLUE:
+            return "MSG"
