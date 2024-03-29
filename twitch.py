@@ -20,9 +20,7 @@ COMMANDS_FILE = 'commands.json'
 config = configparser.ConfigParser()
 KEYWORD_PATTERN = r'\[([^\]]+)\]'
 url_pattern = r'\b(?:https?|ftp):\/\/[\w\-]+(\.[\w\-]+)+[/\w\-?=&#%]*\b'
-TWITCH_AUTHORIZATION_URL = 'https://id.twitch.tv/oauth2/authorize'
-TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
-scope_twitch = 'chat:read chat:edit'
+TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token"
 
 
 def is_user_allowed(author):
@@ -57,17 +55,6 @@ def print_queue_to_file(queue):
         f.write(json.dumps(queue))
 
 
-def start_twitch_oauth_flow():
-    params = {
-        'client_id': config.get('twitch', 'client_id'),
-        'redirect_uri': 'https://localhost:5000/callback_twitch',
-        'response_type': 'code',
-        'scope': scope_twitch
-    }
-    url = f"{TWITCH_AUTHORIZATION_URL}?{urlencode(params)}"
-    wbopen(url)
-
-
 def retrieve_token_info(code):
     payload = {
         'client_id': config.get('twitch', 'client_id'),
@@ -90,10 +77,10 @@ class TwitchBot(commands.Bot):
     def __init__(self, manager):
         config.read(CONFIG_FILE)
         print_to_logs(f"Connecting to {config.get('twitch', 'channel')}", PrintColors.GREEN)
-        self.channel = config.get('twitch', 'channel')
+        self.channel = manager.configuration['twitch']['channel']
         self.queue = []
         self.manager = manager
-        super().__init__(token=config.get('twitch-token', 'access_token'), prefix="!", initial_channels=["#" + self.channel])
+        super().__init__(token=manager.configuration['twitch-token']['access_token'], prefix="!", initial_channels=["#" + self.channel])
         self.load_commands()
 
     def load_commands(self):
