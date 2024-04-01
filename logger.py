@@ -1,7 +1,6 @@
 import os
 from datetime import datetime
 
-
 debug = not os.path.exists(".debug")
 log_queue = []
 

@@ -2,25 +2,21 @@ import configparser
 import json
 import os.path
 import re
-import spotipy
 import string
-from requests import post
 from time import time
 
+import spotipy
 from spotipy import SpotifyException
 from twitchio.ext import commands
 from twitchio.ext.commands import Context
 
 from logger import print_to_logs, PrintColors
-from urllib.parse import urlencode
-from webbrowser import open as wbopen
 
-CONFIG_FILE = 'config.ini'
-COMMANDS_FILE = 'commands.json'
+CONFIG_FILE = 'config/config.ini'
+COMMANDS_FILE = 'config/commands.json'
 config = configparser.ConfigParser()
 KEYWORD_PATTERN = r'\[([^\]]+)\]'
 url_pattern = r'\b(?:https?|ftp):\/\/[\w\-]+(\.[\w\-]+)+[/\w\-?=&#%]*\b'
-TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token"
 
 
 def is_user_allowed(author):
@@ -29,15 +25,17 @@ def is_user_allowed(author):
 
 def replace_keywords(message: string, ctx: commands.Context):
     matches = re.findall(KEYWORD_PATTERN, message)
-    for m in matches:
-        match m:
-            case "sender":
-                return re.sub(KEYWORD_PATTERN, ctx.author.mention, message)
+    if len(matches) > 0:
+        for m in matches:
+            match m:
+                case "sender":
+                    return re.sub(KEYWORD_PATTERN, ctx.author.mention, message)
+    else:
+        return message
 
 
 async def get_player(manager):
-    config.read(CONFIG_FILE)
-    sp = spotipy.Spotify(auth=config.get("spotify-token", "access_token"))
+    sp = spotipy.Spotify(auth=manager.configuration.get("spotify-token", "access_token"))
     try:
         devices = sp.devices()
     except SpotifyException:
@@ -55,35 +53,17 @@ def print_queue_to_file(queue):
         f.write(json.dumps(queue))
 
 
-def retrieve_token_info(code):
-    payload = {
-        'client_id': config.get('twitch', 'client_id'),
-        'client_secret': config.get('twitch', 'client_secret'),
-        'code': code,
-        'grant_type': 'authorization_code',
-        'redirect_uri': 'https://localhost:5000/callback_twitch'
-    }
-    response = post(TWITCH_TOKEN_URL, data=payload)
-    response_json = response.json()
-    access_token = response_json.get('access_token')
-    refresh_token = response_json.get('refresh_token')
-    expires_in = response_json.get('expires_in')
-    # Calculate the expiration timestamp and save it
-    expires_at = int(time()) + expires_in
-    return access_token, refresh_token, expires_at
-
-
 class TwitchBot(commands.Bot):
     def __init__(self, manager):
         config.read(CONFIG_FILE)
-        print_to_logs(f"Connecting to {config.get('twitch', 'channel')}", PrintColors.GREEN)
+        print_to_logs(f"Connecting to {manager.configuration['twitch']['channel']}", PrintColors.GREEN)
         self.channel = manager.configuration['twitch']['channel']
         self.queue = []
         self.manager = manager
-        super().__init__(token=manager.configuration['twitch-token']['access_token'], prefix="!", initial_channels=["#" + self.channel])
-        self.load_commands()
+        super().__init__(token=manager.configuration['twitch-token']['access_token'], prefix="!",
+                         initial_channels=["#" + self.channel])
 
-    def load_commands(self):
+    async def event_ready(self):
         if os.path.exists(COMMANDS_FILE):
             with open(COMMANDS_FILE, "r") as f:
                 commands_json = json.load(f)
@@ -98,12 +78,7 @@ class TwitchBot(commands.Bot):
                 # Use the command decorator to register the command
                 print_to_logs(f"Registered command {command}", PrintColors.BRIGHT_PURPLE)
                 self.command(name=command)(command_handler)
-
-    async def event_ready(self):
-        # Notify us when everything is ready!
-        # We are logged in and ready to chat and use commands...
         print_to_logs(f'Logged in as | {self.nick} to {self.channel}', PrintColors.GREEN)
-        # print(f'User id is | {self.user_id}')
 
     async def event_message(self, message):
         # Messages with echo set to True are messages sent by the bot...
@@ -113,12 +88,19 @@ class TwitchBot(commands.Bot):
         # print_to_logs(json.dumps(message.tags))
         # Print the contents of our message to console...
         print_to_logs(f"{message.author.name}, {message.content}", PrintColors.BLUE)
+
         # Since we have commands and are overriding the default `event_message`
         # We must let the bot know we want to handle and invoke our commands...
         await self.handle_commands(message)
 
+    # def get_name(self, message):
+    #     if message.
+
     async def event_command_error(self, context: Context, error: Exception) -> None:
-        print_to_logs(f"ERROR: Missing command. {error }", PrintColors.RED)
+        if isinstance(error, commands.CommandNotFound):
+            return
+
+        print_to_logs(f"ERROR: Missing command. {error}", PrintColors.RED)
 
     @commands.command()
     async def play(self, ctx: commands.Context):
@@ -178,7 +160,8 @@ class TwitchBot(commands.Bot):
                     "duration": query["duration_ms"]
                 })
                 print_queue_to_file(self.queue)
-                print_to_logs(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]} alla coda!', PrintColors.BRIGHT_PURPLE)
+                print_to_logs(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]} alla coda!',
+                              PrintColors.BRIGHT_PURPLE)
                 await ctx.send(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]}!')
             else:
                 await ctx.send('No player found - Please start playing a song before requesting!')
