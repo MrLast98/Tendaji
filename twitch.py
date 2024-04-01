@@ -10,9 +10,8 @@ from spotipy import SpotifyException
 from twitchio.ext import commands
 from twitchio.ext.commands import Context
 
-from logger import print_to_logs, PrintColors
+from manager_utils import PrintColors
 
-CONFIG_FILE = 'config/config.ini'
 COMMANDS_FILE = 'config/commands.json'
 config = configparser.ConfigParser()
 KEYWORD_PATTERN = r'\[([^\]]+)\]'
@@ -34,20 +33,6 @@ def replace_keywords(message: string, ctx: commands.Context):
         return message
 
 
-async def get_player(manager):
-    sp = spotipy.Spotify(auth=manager.configuration.get("spotify-token", "access_token"))
-    try:
-        devices = sp.devices()
-    except SpotifyException:
-        print_to_logs("Expired Spotify Token", PrintColors.YELLOW)
-        await manager.refresh_spotify_token()
-    for a in devices["devices"]:
-        if a["is_active"]:
-            return sp, a['id']
-        else:
-            return None, None
-
-
 def print_queue_to_file(queue):
     with open("queue.json", "w", encoding="utf-8") as f:
         f.write(json.dumps(queue))
@@ -55,12 +40,11 @@ def print_queue_to_file(queue):
 
 class TwitchBot(commands.Bot):
     def __init__(self, manager):
-        config.read(CONFIG_FILE)
-        print_to_logs(f"Connecting to {manager.configuration['twitch']['channel']}", PrintColors.GREEN)
-        self.channel = manager.configuration['twitch']['channel']
-        self.queue = []
         self.manager = manager
-        super().__init__(token=manager.configuration['twitch-token']['access_token'], prefix="!",
+        self.manager.print.print_to_logs(f"Connecting to {self.manager.configuration['twitch']['channel']}", self.manager.print.GREEN)
+        self.channel = self.manager.configuration['twitch']['channel']
+        self.queue = []
+        super().__init__(token=self.manager.configuration['twitch-token']['access_token'], prefix="!",
                          initial_channels=["#" + self.channel])
 
     async def event_ready(self):
@@ -76,18 +60,18 @@ class TwitchBot(commands.Bot):
                 # Dynamically set the name of the handler to match the command
                 command_handler.__name__ = command
                 # Use the command decorator to register the command
-                print_to_logs(f"Registered command {command}", PrintColors.BRIGHT_PURPLE)
+                self.manager.print.print_to_logs(f"Registered command {command}", self.manager.print.BRIGHT_PURPLE)
                 self.command(name=command)(command_handler)
-        print_to_logs(f'Logged in as | {self.nick} to {self.channel}', PrintColors.GREEN)
+        self.manager.print.print_to_logs(f'Logged in as | {self.nick} to {self.channel}', self.manager.print.GREEN)
 
     async def event_message(self, message):
         # Messages with echo set to True are messages sent by the bot...
         # For now, we just want to ignore them...
         if message.echo:
             return
-        # print_to_logs(json.dumps(message.tags))
+        # PrintColors.print_to_logs(json.dumps(message.tags))
         # Print the contents of our message to console...
-        print_to_logs(f"{message.author.name}, {message.content}", PrintColors.BLUE)
+        self.manager.print.print_to_logs(f"{message.author.name}, {message.content}", self.manager.print.BLUE)
 
         # Since we have commands and are overriding the default `event_message`
         # We must let the bot know we want to handle and invoke our commands...
@@ -100,15 +84,28 @@ class TwitchBot(commands.Bot):
         if isinstance(error, commands.CommandNotFound):
             return
 
-        print_to_logs(f"ERROR: Missing command. {error}", PrintColors.RED)
+        PrintColors.print_to_logs(f"ERROR: Missing command. {error}", PrintColors.RED)
+
+    async def get_player(self):
+        sp = spotipy.Spotify(auth=self.manager.configuration["spotify-token"]["access_token"])
+        try:
+            devices = sp.devices()
+        except SpotifyException:
+            self.manager.print.print_to_logs("Expired Spotify Token", PrintColors.YELLOW)
+            await self.manager.refresh_spotify_token()
+        for a in devices["devices"]:
+            if a["is_active"]:
+                return sp, a['id']
+            else:
+                return None, None
 
     @commands.command()
     async def play(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
-            sp, sp_id = await get_player(self.manager)
+            sp, sp_id = await self.get_player()
             if sp is not None and sp_id is not None:
                 sp.start_playback(sp_id)
-                print_to_logs("Resumed!", PrintColors.YELLOW)
+                self.manager.print.print_to_logs("Resumed!", PrintColors.YELLOW)
                 await ctx.send('Resumed!')
             else:
                 await ctx.send('No player found - Please start playing a song before requesting!')
@@ -116,10 +113,10 @@ class TwitchBot(commands.Bot):
     @commands.command()
     async def pause(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
-            sp, sp_id = await get_player(self.manager)
+            sp, sp_id = await self.get_player()
             if sp is not None and sp_id is not None:
                 sp.pause_playback(sp_id)
-                print_to_logs("Paused!", PrintColors.YELLOW)
+                self.manager.print.print_to_logs("Paused!", self.manager.print.YELLOW)
                 await ctx.send('Paused!')
             else:
                 await ctx.send('No player found - Please start playing a song before requesting!')
@@ -127,11 +124,11 @@ class TwitchBot(commands.Bot):
     @commands.command()
     async def skip(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
-            sp, sp_id = await get_player(self.manager)
+            sp, sp_id = await self.get_player()
             if sp is not None and sp_id is not None:
                 sp.next(sp_id)
                 self.queue.pop(0)
-                print_to_logs("Skipped!", PrintColors.YELLOW)
+                self.manager.print.print_to_logs("Skipped!", self.manager.print.YELLOW)
                 await ctx.send('Skipped!')
             else:
                 await ctx.send('No player found - Please start playing a song before requesting!')
@@ -139,7 +136,7 @@ class TwitchBot(commands.Bot):
     @commands.command()
     async def sr(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
-            sp, _ = await get_player(self.manager)
+            sp, _ = await self.get_player()
             if sp is not None:
                 song = ctx.message.content.strip("!sr")
 
@@ -160,8 +157,8 @@ class TwitchBot(commands.Bot):
                     "duration": query["duration_ms"]
                 })
                 print_queue_to_file(self.queue)
-                print_to_logs(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]} alla coda!',
-                              PrintColors.BRIGHT_PURPLE)
+                self.manager.print.print_to_logs(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]} alla coda!',
+                              self.manager.print.BRIGHT_PURPLE)
                 await ctx.send(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]}!')
             else:
                 await ctx.send('No player found - Please start playing a song before requesting!')
