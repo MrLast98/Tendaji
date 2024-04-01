@@ -26,7 +26,7 @@ from twitch import TwitchBot
 # Files Location
 COMMANDS_FILE = "config/commands.json"
 QUEUE_FILE = "queue.json"
-CONFIG_FILE = "config.ini"
+CONFIG_FILE = "config/config.ini"
 
 # Necessary Links for authorization
 SPOTIFY_AUTHORIZATION_URL = "https://accounts.spotify.com/authorize"
@@ -91,15 +91,18 @@ class Manager:
 
     def startup_checks(self):
         if not path.exists("config"):
+            print_to_logs("Creating new config folder", PrintColors.YELLOW)
             mkdir("config")
-            if path.exists(CONFIG_FILE):
-                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                    lines = f.readlines()
-                with open(f"config/{CONFIG_FILE}", "w", encoding="utf-8") as f:
-                    f.writelines(lines)
+        if path.exists("config.ini"):
+            print_to_logs("Importing config file from app root", PrintColors.YELLOW)
+            with open("config.ini", "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            with open(f"{CONFIG_FILE}", "w", encoding="utf-8") as f:
+                f.writelines(lines)
+            remove("config.ini")
 
         print_to_logs("Checking config file existence", PrintColors.BRIGHT_PURPLE)
-        if path.exists(f"config/{CONFIG_FILE}"):
+        if path.exists(f"{CONFIG_FILE}"):
             print_to_logs("Config found! Loading configuration...", PrintColors.GREEN)
             self.config.read(CONFIG_FILE)
         else:
@@ -144,21 +147,21 @@ class Manager:
         self.config.add_section("app")
         self.set_config("app", "last_opened", return_date_string())
         self.config.add_section("twitch")
-        self.set_config("twitch", "channel", None)
-        self.set_config("twitch", "client_id", None)
-        self.set_config("twitch", "client_secret", None)
+        self.set_config("twitch", "channel", "")
+        self.set_config("twitch", "client_id", "")
+        self.set_config("twitch", "client_secret", "")
         self.config.add_section("spotify")
-        self.set_config("spotify", "client_id", None)
-        self.set_config("spotify", "redirect_uri", None)
-        self.set_config("spotify", "client_secret", None)
-        self.config.add_section("twitch-token")
-        self.set_config("spotify-token", "access_token", None)
-        self.set_config("spotify-token", "refresh_token", None)
-        self.set_config("spotify-token", "expires_at", None)
+        self.set_config("spotify", "client_id", "")
+        self.set_config("spotify", "redirect_uri", "")
+        self.set_config("spotify", "client_secret", "")
         self.config.add_section("spotify-token")
-        self.set_config("twitch-token", "access_token", None)
-        self.set_config("twitch-token", "refresh_token", None)
-        self.set_config("twitch-token", "expires_at", None)
+        self.set_config("spotify-token", "access_token", "")
+        self.set_config("spotify-token", "refresh_token", "")
+        self.set_config("spotify-token", "expires_at", "")
+        self.config.add_section("twitch-token")
+        self.set_config("twitch-token", "access_token", "")
+        self.set_config("twitch-token", "refresh_token", "")
+        self.set_config("twitch-token", "expires_at", "")
 
     def setup(self):
         # Define the expected sections and their items
@@ -169,37 +172,28 @@ class Manager:
             "twitch-token": ["access_token", "refresh_token", "expires_at"],
             "spotify-token": ["access_token", "refresh_token", "expires_at"]
         }
+        required_keys = {(section, item) for section, items in sections.items() for item in items}
+        present_keys = {(section, item) for section, items in self.configuration.items() for item in items}
 
-        def create_item(section, item):
-            if item not in self.config.items(section) or item is None:
-                match item:
-                    case "last_opened":
-                        self.set_config(section, item, return_date_string())
-                    case "redirect_uri":
-                        self.set_config(section, item, "https://localhost:5000/callback")
-                    case "selected_language":
-                        self.set_config(section, item, "en")
-                    case _:
-                        if section == "twitch" or section == "spotify":
-                            question = self.translation_manager.get_translation("insert_missing_configuration")
-                            section_name = self.translation_manager.get_dictionary(section)
-                            item_name = self.translation_manager.get_dictionary(item)
-                            self.set_config(section, item, input(f"{question}{section_name} {item_name}: "))
-                        else:
-                            self.set_config(section, item, "")
-            return item
-
-        def create_section(section, items):
-            section_name = self.translation_manager.get_dictionary(section)
-            if section not in self.config.sections():
-                print_to_logs(f"Section {section_name} is missing. Creating...", PrintColors.RED)
-                self.config[section] = {}
-            return section, items
-
-        # Create sections and their items for the first set
-        first_set_results = map(lambda x: create_section(x[0], x[1]), sections.items())
-        for s, i in first_set_results:
-            _ = [create_item(s, x) for x in i]
+        # if item not in section_items or not is_string_valid(section_items[item]):
+        #     match item:
+        #         case "last_opened":
+        #             self.set_config(section, item, return_date_string())
+        #         case "redirect_uri":
+        #             self.set_config(section, item, "https://localhost:5000/callback")
+        #         case "selected_language":
+        #             self.set_config(section, item, "en")
+        #         case _:
+        #             if section == "twitch" or section == "spotify":
+        #                 question = self.translation_manager.get_translation("insert_missing_configuration")
+        #                 section_name = self.translation_manager.get_dictionary(section)
+        #                 item_name = self.translation_manager.get_dictionary(item)
+        #                 value = input(f"{question}{section_name} {item_name}: ")
+        #                 self.set_config(section, item, value)
+        #             else:
+        #                 self.set_config(section, item, "")
+        # return item
+        return required_keys.issubset(present_keys)
 
     def import_configuration(self):
         self.configuration = {
