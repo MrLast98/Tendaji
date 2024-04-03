@@ -1,12 +1,12 @@
 import configparser
 import json
 import os
-import manager_utils
-from time import time
 from datetime import datetime
+from time import time
 
 from quart import Quart, request, redirect, session
 from requests import post
+
 from twitch import print_queue_to_file
 
 # Configuration and Flask App

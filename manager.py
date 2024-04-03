@@ -2,7 +2,7 @@ import configparser
 import json
 import secrets
 import sys
-from asyncio import create_task, run, CancelledError, sleep, current_task, gather, all_tasks, Event, to_thread
+from asyncio import create_task, run, CancelledError, sleep, current_task, gather, all_tasks, Event, to_thread      
 from contextlib import suppress
 from os import path, remove, mkdir
 from time import time
@@ -14,10 +14,12 @@ import uvicorn
 from aiohttp import ClientSession
 from spotipy import SpotifyOAuth
 
+from manager_utils import PrintColors, load_configuration_from_json, save_configuration_to_json, return_date_string, \
+    check_dict_structure, is_string_valid
 from quart_server import QuartServer
 from translations import TranslationManager
 from twitch import TwitchBot
-from manager_utils import PrintColors, load_configuration_from_json, save_configuration_to_json, return_date_string, check_dict_structure, is_string_valid
+
 # pyinstaller --onefile --add-data "localhost.ecc.crt;." --add-data "localhost.ecc.key;." manager.py
 
 
@@ -44,27 +46,27 @@ class Manager:
         self.bot = None
         self.configuration = {
             "app": {
-                "last_opened": None  # type: str, None
+                "last_opened": None  # type: str
             },
             "twitch": {
-                "channel": None,   # type: str, None
-                "client_id": None,  # type: str, None
-                "client_secret": None  # type: str, None
+                "channel": None,   # type: str
+                "client_id": None,  # type: str
+                "client_secret": None  # type: str
             },
             "spotify": {
-                "client_id": None,  # type: str, None
-                "client_secret": None,  # type: str, None
-                "redirect_uri": None  # type: str, None
+                "client_id": None,  # type: str
+                "client_secret": None,  # type: str
+                "redirect_uri": None  # type: str
             },
             "twitch-token": {
-                "access_token": None,  # type: str, None
-                "refresh_token": None,  # type: str, None
-                "expires_at": None  # type: str, None
+                "access_token": None,  # type: str
+                "refresh_token": None,  # type: str
+                "expires_at": None  # type: str
             },
             "spotify-token": {
-                "access_token": None,  # type: str, None
-                "refresh_token": None,  # type: str, None
-                "expires_at": None  # type: str, None
+                "access_token": None,  # type: str
+                "refresh_token": None,  # type: str
+                "expires_at": None  # type: str
             }
         }
         self.tasks = {
@@ -350,13 +352,13 @@ class Manager:
         self.print.print_to_logs("Cleanup complete. Exiting...", self.print.BRIGHT_PURPLE)
 
     async def main(self):
-        self.tasks["quart"] = create_task(self.start_server().serve())
-        await self.check_tokens()
+        # await self.check_tokens()
         try:
-            self.tasks["updater"] = to_thread(self.core_loop())
+            self.tasks["quart"] = create_task(self.start_server().serve())
+            self.tasks["updater"] = create_task(self.core_loop())
             self.bot = TwitchBot(self)
             self.tasks["bot"] = create_task(self.bot.start())
-            tasks = [self.tasks["quart"], self.tasks["bot"]] #  self.tasks["updater"],
+            tasks = [self.tasks["quart"], self.tasks["updater"], self.tasks["bot"]]
             await gather(*tasks)
         except KeyboardInterrupt:
             await self.shutdown()

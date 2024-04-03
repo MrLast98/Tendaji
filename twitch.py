@@ -3,10 +3,9 @@ import json
 import os.path
 import re
 import string
-from time import time
 
 import spotipy
-from spotipy import SpotifyException
+from spotipy import SpotifyException, Spotify
 from twitchio.ext import commands
 from twitchio.ext.commands import Context
 
@@ -36,6 +35,15 @@ def replace_keywords(message: string, ctx: commands.Context):
 def print_queue_to_file(queue):
     with open("queue.json", "w", encoding="utf-8") as f:
         f.write(json.dumps(queue))
+
+
+def parse_song(song):
+    artists = [a["name"] for a in song["artists"]]
+    return {
+        "name": song["name"],
+        "artists": ", ".join(artists),
+        "id": song["id"]
+    }
 
 
 class TwitchBot(commands.Bot):
@@ -84,9 +92,9 @@ class TwitchBot(commands.Bot):
         if isinstance(error, commands.CommandNotFound):
             return
 
-        PrintColors.print_to_logs(f"ERROR: Missing command. {error}", PrintColors.RED)
+        self.manager.print.print_to_logs(f"ERROR: Missing command. {error}", PrintColors.RED)
 
-    async def get_player(self):
+    async def get_player(self, ctx: commands.Context = None) -> (Spotify, string):
         sp = spotipy.Spotify(auth=self.manager.configuration["spotify-token"]["access_token"])
         try:
             devices = sp.devices()
@@ -96,47 +104,60 @@ class TwitchBot(commands.Bot):
         for a in devices["devices"]:
             if a["is_active"]:
                 return sp, a['id']
-            else:
-                return None, None
+        if ctx:
+            await ctx.send(self.manager.translation_manager.get_errors("twitch_bot", "missing_player"))
+        return None, None
+
+    @commands.command()
+    async def sq(self, ctx: commands.Context):
+        if is_user_allowed(ctx.author):
+            sp, sp_id = await self.get_player(ctx)
+            if sp is not None and sp_id is not None:
+                response = sp.queue()
+                currently_playing = parse_song(response["currently_playing"])
+                # queue = [parse_song(a) for a in response["queue"]]
+
+                await ctx.send(currently_playing["name"])
 
     @commands.command()
     async def play(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
-            sp, sp_id = await self.get_player()
+            sp, sp_id = await self.get_player(ctx)
             if sp is not None and sp_id is not None:
                 sp.start_playback(sp_id)
                 self.manager.print.print_to_logs("Resumed!", PrintColors.YELLOW)
                 await ctx.send('Resumed!')
-            else:
-                await ctx.send('No player found - Please start playing a song before requesting!')
 
     @commands.command()
     async def pause(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
-            sp, sp_id = await self.get_player()
+            sp, sp_id = await self.get_player(ctx)
             if sp is not None and sp_id is not None:
                 sp.pause_playback(sp_id)
                 self.manager.print.print_to_logs("Paused!", self.manager.print.YELLOW)
                 await ctx.send('Paused!')
-            else:
-                await ctx.send('No player found - Please start playing a song before requesting!')
 
     @commands.command()
     async def skip(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
-            sp, sp_id = await self.get_player()
+            sp, sp_id = await self.get_player(ctx)
             if sp is not None and sp_id is not None:
-                sp.next(sp_id)
-                self.queue.pop(0)
+                sp.next_track()
+                # self.queue.pop(0)
                 self.manager.print.print_to_logs("Skipped!", self.manager.print.YELLOW)
                 await ctx.send('Skipped!')
-            else:
-                await ctx.send('No player found - Please start playing a song before requesting!')
+
+    @commands.command()
+    async def sbagliato(self, ctx: commands.Context):
+        if is_user_allowed(ctx.author):
+            sp, sp_id = await self.get_player(ctx)
+            if sp is not None and sp_id is not None:
+                await ctx.send("Oh No")
 
     @commands.command()
     async def sr(self, ctx: commands.Context):
         if is_user_allowed(ctx.author):
-            sp, _ = await self.get_player()
+            sp, _ = await self.get_player(ctx)
             if sp is not None:
                 song = ctx.message.content.strip("!sr")
 
@@ -160,5 +181,3 @@ class TwitchBot(commands.Bot):
                 self.manager.print.print_to_logs(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]} alla coda!',
                               self.manager.print.BRIGHT_PURPLE)
                 await ctx.send(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]}!')
-            else:
-                await ctx.send('No player found - Please start playing a song before requesting!')

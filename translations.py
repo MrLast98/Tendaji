@@ -1,5 +1,5 @@
-import os
 import json
+import os
 
 TRANSLATION_FOLDER = "translations"
 
@@ -36,3 +36,7 @@ class TranslationManager:
         dictionary = self.translations.get(language, {}).get("dictionary", {})
         return dictionary.get(key, f"No dictionary item found for key '{key}' in language '{language}'")
 
+    def get_errors(self, section, key, language=None):
+        language = language if is_string_valid(language) else self.get_language()
+        errors = self.translations.get(language, {})["errors"][section]
+        return errors.get(key, f"No dictionary item found for key '{key}' in language '{language}'")
