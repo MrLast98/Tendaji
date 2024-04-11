@@ -2,7 +2,7 @@ import configparser
 import json
 import secrets
 import sys
-from asyncio import create_task, run, CancelledError, sleep, current_task, gather, all_tasks, Event, to_thread      
+from asyncio import create_task, run, CancelledError, sleep, gather, all_tasks, Event, to_thread
 from contextlib import suppress
 from os import path, remove, mkdir
 from time import time
@@ -10,9 +10,11 @@ from typing import Coroutine
 from urllib.parse import urlencode
 from webbrowser import open as wbopen
 
+import spotipy
 import uvicorn
 from aiohttp import ClientSession
-from spotipy import SpotifyOAuth
+from spotipy import SpotifyOAuth, Spotify, SpotifyException
+from twitchio.ext import commands
 
 from manager_utils import PrintColors, load_configuration_from_json, save_configuration_to_json, return_date_string, \
     check_dict_structure, is_string_valid
@@ -46,27 +48,28 @@ class Manager:
         self.bot = None
         self.configuration = {
             "app": {
-                "last_opened": None  # type: str
+                "last_opened": None,
+                "selected_language": None
             },
             "twitch": {
-                "channel": None,   # type: str
-                "client_id": None,  # type: str
-                "client_secret": None  # type: str
+                "channel": None,
+                "client_id": None,
+                "client_secret": None
             },
             "spotify": {
-                "client_id": None,  # type: str
-                "client_secret": None,  # type: str
-                "redirect_uri": None  # type: str
+                "client_id": None,
+                "client_secret": None,
+                "redirect_uri": None
             },
             "twitch-token": {
-                "access_token": None,  # type: str
-                "refresh_token": None,  # type: str
-                "expires_at": None  # type: str
+                "access_token": None,
+                "refresh_token": None,
+                "expires_at": None
             },
             "spotify-token": {
-                "access_token": None,  # type: str
-                "refresh_token": None,  # type: str
-                "expires_at": None  # type: str
+                "access_token": None,
+                "refresh_token": None,
+                "expires_at": None
             }
         }
         self.tasks = {
@@ -76,6 +79,7 @@ class Manager:
         }
         self.translation_manager = TranslationManager(self)
         self.authentication_flag = Event()
+        self.shutdown_flag = Event()
         self.quart = QuartServer(self)
         self.print = PrintColors()
         self.startup_checks()
@@ -103,10 +107,28 @@ class Manager:
             self.print.print_to_logs("Config file not found!", self.print.RED)
             self.print.print_to_logs("Creating new one and generating Quart app secret..", self.print.YELLOW)
             save_configuration_to_json(self, CONFIG_FILE)
-
         self.setup()
         self.save_config()
         self.print.print_to_logs("Configuration Loaded", self.print.GREEN)
+
+        print("Wanna reset the tokens?[Y/]")
+        i = input("> ")
+        if i.lower() == "y":
+            with open(CONFIG_FILE, 'r', encoding="utf-8") as f:
+                data = json.load(f)
+
+            # Reset tokens to empty strings
+            data["twitch-token"]["access_token"] = ""
+            data["twitch-token"]["refresh_token"] = ""
+            data["twitch-token"]["expires_at"] = ""
+            data["spotify-token"]["access_token"] = ""
+            data["spotify-token"]["refresh_token"] = ""
+            data["spotify-token"]["expires_at"] = ""
+
+            # Write the updated data back to the file
+            with open(CONFIG_FILE, 'w', encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+
         filename = f"logs/logs-{return_date_string()}.txt"
         if not path.exists(filename):
             with open(filename, "w", encoding="utf-8") as f:
@@ -134,25 +156,19 @@ class Manager:
             with open("config/commands.json", "w", encoding="utf-8") as f:
                 f.write(json.dumps({"example": "[sender] this is an example command"}))
 
-    # def generate_config_file(self):
-    #     self.config.add_section("app")
-    #     self.set_config("app", "last_opened", return_date_string())
-    #     self.config.add_section("twitch")
-    #     self.set_config("twitch", "channel", "")
-    #     self.set_config("twitch", "client_id", "")
-    #     self.set_config("twitch", "client_secret", "")
-    #     self.config.add_section("spotify")
-    #     self.set_config("spotify", "client_id", "")
-    #     self.set_config("spotify", "redirect_uri", "")
-    #     self.set_config("spotify", "client_secret", "")
-    #     self.config.add_section("spotify-token")
-    #     self.set_config("spotify-token", "access_token", "")
-    #     self.set_config("spotify-token", "refresh_token", "")
-    #     self.set_config("spotify-token", "expires_at", "")
-    #     self.config.add_section("twitch-token")
-    #     self.set_config("twitch-token", "access_token", "")
-    #     self.set_config("twitch-token", "refresh_token", "")
-    #     self.set_config("twitch-token", "expires_at", "")
+    async def get_player(self, ctx: commands.Context = None) -> (Spotify, str):
+        sp = spotipy.Spotify(auth=self.configuration["spotify-token"]["access_token"])
+        try:
+            devices = sp.devices()
+        except SpotifyException:
+            self.print.print_to_logs("Expired Spotify Token", PrintColors.YELLOW)
+            await self.refresh_spotify_token()
+        for a in devices["devices"]:
+            if a["is_active"]:
+                return sp, a['id']
+        if ctx:
+            await ctx.send(self.translation_manager.get_errors("twitch_bot", "missing_player"))
+        return None, None
 
     def setup(self):
         sections = {
@@ -164,24 +180,24 @@ class Manager:
         }
 
         missing_keys = check_dict_structure(self.configuration, sections)
-
-        for section, item in missing_keys:
-            match item:
-                case "last_opened":
-                    self.configuration[section][item] = return_date_string()
-                case "redirect_uri":
-                    self.configuration[section][item] = "https://localhost:5000/callback"
-                case "selected_language":
-                    self.configuration[section][item] = "en"
-                case _:
-                    if section == "twitch" or section == "spotify":
-                        question = self.translation_manager.get_translation("insert_missing_configuration")
-                        section_name = self.translation_manager.get_dictionary(section)
-                        item_name = self.translation_manager.get_dictionary(item)
-                        value = input(f"{question}{section_name} {item_name}: ")
-                        self.configuration[section][item] = value
-                    else:
-                        self.configuration[section][item] = ""
+        if len(missing_keys) > 0:
+            for section, item in missing_keys:
+                match item:
+                    case "last_opened":
+                        self.configuration[section][item] = return_date_string()
+                    case "redirect_uri":
+                        self.configuration[section][item] = "https://localhost:5000/callback"
+                    case "selected_language":
+                        self.configuration[section][item] = "en"
+                    case _:
+                        if section == "twitch" or section == "spotify":
+                            question = self.translation_manager.get_translation("insert_missing_configuration")
+                            section_name = self.translation_manager.get_dictionary(section)
+                            item_name = self.translation_manager.get_dictionary(item)
+                            value = input(f"{question}{section_name} {item_name}: ")
+                            self.configuration[section][item] = value
+                        else:
+                            self.configuration[section][item] = ""
 
     def set_config(self, section, key, value):
         self.configuration[section][key] = value
@@ -198,7 +214,7 @@ class Manager:
     async def await_authentication(self):
         while self.authentication_flag.is_set():
             await sleep(1)
-        self.authentication_flag.clear()
+        self.print.print_to_logs("Authentication completed!", self.print.GREEN)
 
     @staticmethod
     def resource_path(relative_path):
@@ -225,7 +241,7 @@ class Manager:
                             scope=SCOPE_SPOTIFY)
 
     async def create_new_bot(self) -> Coroutine:
-        if self.bot is not None:
+        if self.bot is not None and self.tasks["bot"] is not None:
             self.print.print_to_logs("Shutting down task", self.print.YELLOW)
             self.bot.close()
             try:
@@ -281,6 +297,24 @@ class Manager:
             self.print.print_to_logs(f"Response: {response}", self.print.WHITE)
             await self.start_spotify_oauth_flow()
 
+    async def start_twitch_oauth_flow(self):
+        self.print.print_to_logs("Re-Authorizing Twitch Bot...", self.print.YELLOW)
+        params = {
+            "client_id": self.configuration["twitch"]["client_id"],
+            "redirect_uri": "https://localhost:5000/callback_twitch",
+            "response_type": "code",
+            "scope": SCOPE_TWITCH
+        }
+        url = f"{TWITCH_AUTHORIZATION_URL}?{urlencode(params)}"
+        wbopen(url)
+        self.authentication_flag.set()
+        await self.await_authentication()
+
+    async def core_loop(self):
+        while not self.shutdown_flag.is_set():
+            await sleep(300)
+            await self.check_tokens()
+
     async def check_spotify(self):
         if (not is_string_valid(self.configuration["spotify-token"]["expires_at"]) or
                not is_string_valid(self.configuration["spotify-token"]["refresh_token"]) or
@@ -301,37 +335,19 @@ class Manager:
         if (not is_string_valid(self.configuration["twitch-token"]["access_token"]) or
                 not is_string_valid(self.configuration["twitch-token"]["refresh_token"]) or
                 not is_string_valid(self.configuration["twitch-token"]["expires_at"])):
-            self.print.print_to_logs("Twitch token configuration missing. Retrieving...", self.print.RED)
+            self.print.print_to_logs("Twitch token missing. Retrieving...", self.print.RED)
             await self.start_twitch_oauth_flow()
             self.save_config()
-            self.bot = to_thread(self.create_new_bot())
+            self.tasks["bot"] = create_task(self.create_new_bot())
         elif (is_string_valid(self.configuration["twitch-token"]["expires_at"]) and (
                 int(self.configuration["twitch-token"]["expires_at"]) < int(time())) or
               abs(int(time()) - int(self.configuration["twitch-token"]["expires_at"])) <= 300):
             self.print.print_to_logs("Expired Twitch Token", self.print.YELLOW)
             await self.update_twitch_token()
             self.save_config()
-            self.bot = to_thread(self.create_new_bot())
+            self.tasks["bot"] = create_task(self.create_new_bot())
         else:
             self.print.print_to_logs("Twitch is OK!", self.print.GREEN)
-
-    async def start_twitch_oauth_flow(self):
-        self.print.print_to_logs("Re-Authorizing Twitch Bot...", self.print.YELLOW)
-        params = {
-            "client_id": self.configuration["twitch"]["client_id"],
-            "redirect_uri": "https://localhost:5000/callback_twitch",
-            "response_type": "code",
-            "scope": SCOPE_TWITCH
-        }
-        url = f"{TWITCH_AUTHORIZATION_URL}?{urlencode(params)}"
-        wbopen(url)
-        self.authentication_flag.set()
-        await self.await_authentication()
-
-    async def core_loop(self):
-        while not current_task().cancelled():
-            await self.check_tokens()
-            await sleep(300)
 
     async def check_tokens(self):
         # Twitch check
@@ -343,8 +359,9 @@ class Manager:
 
     async def shutdown(self):
         self.print.print_to_logs("Initiating shutdown...", self.print.BRIGHT_PURPLE)
-        self.bot.close()
+        await self.bot.close()
         self.save_config()
+        self.shutdown_flag.set()
         for task in all_tasks():
             task.cancel()
             with suppress(CancelledError):
@@ -352,15 +369,18 @@ class Manager:
         self.print.print_to_logs("Cleanup complete. Exiting...", self.print.BRIGHT_PURPLE)
 
     async def main(self):
-        # await self.check_tokens()
         try:
             self.tasks["quart"] = create_task(self.start_server().serve())
-            self.tasks["updater"] = create_task(self.core_loop())
+            await self.check_tokens()
             self.bot = TwitchBot(self)
             self.tasks["bot"] = create_task(self.bot.start())
+            self.tasks["updater"] = create_task(self.core_loop())
             tasks = [self.tasks["quart"], self.tasks["updater"], self.tasks["bot"]]
             await gather(*tasks)
         except KeyboardInterrupt:
+            self.print.print_to_logs("Shutting down...", PrintColors.YELLOW)
+        except Exception as e:
+            self.print.print_to_logs(e, PrintColors.RED)
             await self.shutdown()
 
 

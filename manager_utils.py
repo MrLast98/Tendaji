@@ -15,6 +15,8 @@ class PrintColors:
 
     def __init__(self):
         self.log_queue = []
+        if not os.path.exists("logs"):
+            os.mkdir("logs")
 
     def print_to_logs(self, message, color):
         current_date = datetime.now().strftime("%d-%m-%Y")
@@ -40,7 +42,7 @@ def new_print(message, color):
     # Format the log entry
     message = f"{timestamp} | {color}{level}{PrintColors.WHITE}: {color}{message}{PrintColors.WHITE}"
     current_date = datetime.now().strftime("%d-%m-%Y")
-    file_name = f"logs-{current_date}.txt"
+    file_name = f"logs/logs-{current_date}.txt"
     # if debug:
     print(message)
     # Open the log file and append the log entry
@@ -74,7 +76,7 @@ def load_configuration_from_json(self, filename):
 
 def check_dict_structure(input_dict, sections):
     required_keys = {(section, item) for section, items in sections.items() for item in items}
-    present_keys = {(section, item) for section, items in input_dict.items() for item in items}
+    present_keys = {(section, item) for section, items in input_dict.items() for item in items if items[item] is not None and items[item] != ""}
     missing_keys = required_keys - present_keys
     return missing_keys
 

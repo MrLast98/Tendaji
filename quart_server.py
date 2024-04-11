@@ -25,8 +25,6 @@ def update_queue(track_name, artist_name):
     print_queue_to_file(queue)
 
 
-#
-#
 # def signal_handler(loop):
 #     """Initiates the shutdown process."""
 #     print_to_logs("Signal received, shutting down.")
@@ -71,8 +69,19 @@ class QuartServer:
             self.manager.set_config('spotify-token', 'access_token', token['access_token'])
             self.manager.set_config('spotify-token', 'refresh_token', token.get('refresh_token'))
             self.manager.set_config('spotify-token', 'expires_at', str(token['expires_at']))
+            self.manager.authentication_flag.clear()
             self.manager.save_config()
-            return redirect("/currently_playing")
+            return '''
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Spotify Token Retrieved</title>
+                </head>
+                <body>
+                    <p>You can close this window.</p>
+                </body>
+                </html>
+            '''
         else:
             error = "Error retrieving tokens"
             f'''
@@ -96,11 +105,12 @@ class QuartServer:
             self.manager.set_config('twitch-token', 'refresh_token', refresh_token)
             self.manager.set_config('twitch-token', 'expires_at', str(expires_at))
             self.manager.save_config()
+            self.manager.authentication_flag.clear()
             return '''
                 <!DOCTYPE html>
                 <html>
                 <head>
-                    <title>Process Complete</title>
+                    <title>Twitch Token Retrieved</title>
                 </head>
                 <body>
                     <p>You can close this window.</p>
@@ -121,7 +131,7 @@ class QuartServer:
             '''
 
     async def currently_playing(self):
-        sp, _ = await self.manager.bot.get_player()
+        sp, _ = await self.manager.get_player()
         if sp is not None:
             track = sp.current_playback()
             if track is not None:

@@ -3,9 +3,8 @@ import json
 import os.path
 import re
 import string
+from asyncio import sleep, Event
 
-import spotipy
-from spotipy import SpotifyException, Spotify
 from twitchio.ext import commands
 from twitchio.ext.commands import Context
 
@@ -15,10 +14,6 @@ COMMANDS_FILE = 'config/commands.json'
 config = configparser.ConfigParser()
 KEYWORD_PATTERN = r'\[([^\]]+)\]'
 url_pattern = r'\b(?:https?|ftp):\/\/[\w\-]+(\.[\w\-]+)+[/\w\-?=&#%]*\b'
-
-
-def is_user_allowed(author):
-    return author.is_subscriber or author.is_vip or author.is_mod or author.is_broadcaster
 
 
 def replace_keywords(message: string, ctx: commands.Context):
@@ -52,6 +47,8 @@ class TwitchBot(commands.Bot):
         self.manager.print.print_to_logs(f"Connecting to {self.manager.configuration['twitch']['channel']}", self.manager.print.GREEN)
         self.channel = self.manager.configuration['twitch']['channel']
         self.queue = []
+        self.token_flag = Event()
+        # self.await_token()
         super().__init__(token=self.manager.configuration['twitch-token']['access_token'], prefix="!",
                          initial_channels=["#" + self.channel])
 
@@ -60,7 +57,6 @@ class TwitchBot(commands.Bot):
             with open(COMMANDS_FILE, "r") as f:
                 commands_json = json.load(f)
             for command, message in commands_json.items():
-                # Use a closure to correctly capture 'message' for each command
                 async def command_handler(ctx: commands.Context, msg=message):
                     msg = replace_keywords(msg, ctx)
                     await ctx.send(msg)
@@ -85,33 +81,29 @@ class TwitchBot(commands.Bot):
         # We must let the bot know we want to handle and invoke our commands...
         await self.handle_commands(message)
 
-    # def get_name(self, message):
-    #     if message.
-
     async def event_command_error(self, context: Context, error: Exception) -> None:
         if isinstance(error, commands.CommandNotFound):
             return
 
         self.manager.print.print_to_logs(f"ERROR: Missing command. {error}", PrintColors.RED)
 
-    async def get_player(self, ctx: commands.Context = None) -> (Spotify, string):
-        sp = spotipy.Spotify(auth=self.manager.configuration["spotify-token"]["access_token"])
-        try:
-            devices = sp.devices()
-        except SpotifyException:
-            self.manager.print.print_to_logs("Expired Spotify Token", PrintColors.YELLOW)
-            await self.manager.refresh_spotify_token()
-        for a in devices["devices"]:
-            if a["is_active"]:
-                return sp, a['id']
-        if ctx:
-            await ctx.send(self.manager.translation_manager.get_errors("twitch_bot", "missing_player"))
-        return None, None
+    async def await_token(self):
+        while self.token_flag.is_set():
+            await sleep(1)
+        self.token_flag.clear()
+
+    def is_user_allowed(self, ctx):
+        author = ctx.author
+        if author.is_subscriber or author.is_vip or author.is_mod or author.is_broadcaster:
+            return True
+        else:
+            self.manager.print.print_to_logs("User not allowed to send messages", self.manager.print.RED)
+            return False
 
     @commands.command()
     async def sq(self, ctx: commands.Context):
-        if is_user_allowed(ctx.author):
-            sp, sp_id = await self.get_player(ctx)
+        if self.is_user_allowed(ctx):
+            sp, sp_id = await self.manager.get_player(ctx)
             if sp is not None and sp_id is not None:
                 response = sp.queue()
                 currently_playing = parse_song(response["currently_playing"])
@@ -121,8 +113,8 @@ class TwitchBot(commands.Bot):
 
     @commands.command()
     async def play(self, ctx: commands.Context):
-        if is_user_allowed(ctx.author):
-            sp, sp_id = await self.get_player(ctx)
+        if self.is_user_allowed(ctx):
+            sp, sp_id = await self.manager.get_player(ctx)
             if sp is not None and sp_id is not None:
                 sp.start_playback(sp_id)
                 self.manager.print.print_to_logs("Resumed!", PrintColors.YELLOW)
@@ -130,8 +122,8 @@ class TwitchBot(commands.Bot):
 
     @commands.command()
     async def pause(self, ctx: commands.Context):
-        if is_user_allowed(ctx.author):
-            sp, sp_id = await self.get_player(ctx)
+        if self.is_user_allowed(ctx):
+            sp, sp_id = await self.manager.get_player(ctx)
             if sp is not None and sp_id is not None:
                 sp.pause_playback(sp_id)
                 self.manager.print.print_to_logs("Paused!", self.manager.print.YELLOW)
@@ -139,8 +131,8 @@ class TwitchBot(commands.Bot):
 
     @commands.command()
     async def skip(self, ctx: commands.Context):
-        if is_user_allowed(ctx.author):
-            sp, sp_id = await self.get_player(ctx)
+        if self.is_user_allowed(ctx):
+            sp, sp_id = await self.manager.get_player(ctx)
             if sp is not None and sp_id is not None:
                 sp.next_track()
                 # self.queue.pop(0)
@@ -149,15 +141,15 @@ class TwitchBot(commands.Bot):
 
     @commands.command()
     async def sbagliato(self, ctx: commands.Context):
-        if is_user_allowed(ctx.author):
-            sp, sp_id = await self.get_player(ctx)
+        if self.is_user_allowed(ctx):
+            sp, sp_id = await self.manager.get_player(ctx)
             if sp is not None and sp_id is not None:
                 await ctx.send("Oh No")
 
     @commands.command()
     async def sr(self, ctx: commands.Context):
-        if is_user_allowed(ctx.author):
-            sp, _ = await self.get_player(ctx)
+        if self.is_user_allowed(ctx):
+            sp, _ = await self.manager.get_player(ctx)
             if sp is not None:
                 song = ctx.message.content.strip("!sr")
 

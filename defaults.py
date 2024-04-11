@@ -1,0 +1,19 @@
+EN_DEFAULTS = {
+        "dictionary": {
+            "app": "App",
+            "twitch": "Twitch",
+            "spotify": "Spotify",
+            "selected_language": "Language",
+            "channel": "Channel you want to join in",
+            "client_id": "Client ID",
+            "client_secret": "Client Secret"
+
+        },
+        "errors": {
+            "twitch_bot": {
+                "missing_player": "No player found - Please start playing a song before requesting!"
+            }
+        },
+        "insert_missing_configuration": "Please, enter the ",
+        "section_missing": ""
+    }
