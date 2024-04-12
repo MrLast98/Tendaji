@@ -62,6 +62,8 @@ def get_level_from_color(color):
             return "INFO"
         case PrintColors.BLUE:
             return "MSG"
+        case PrintColors.WHITE:
+            return "SYS"
 
 
 def save_configuration_to_json(self, filename):
@@ -76,7 +78,8 @@ def load_configuration_from_json(self, filename):
 
 def check_dict_structure(input_dict, sections):
     required_keys = {(section, item) for section, items in sections.items() for item in items}
-    present_keys = {(section, item) for section, items in input_dict.items() for item in items if items[item] is not None and items[item] != ""}
+    present_keys = {(section, item) for section, items in input_dict.items() for item in items if
+                    items[item] is not None and items[item] != ""}
     missing_keys = required_keys - present_keys
     return missing_keys
 

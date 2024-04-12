@@ -1,5 +1,6 @@
 import json
 import os
+
 import defaults
 
 TRANSLATION_FOLDER = "translations"

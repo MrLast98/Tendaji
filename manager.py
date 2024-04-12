@@ -1,8 +1,7 @@
-import configparser
 import json
 import secrets
 import sys
-from asyncio import create_task, run, CancelledError, sleep, gather, all_tasks, Event, to_thread
+from asyncio import create_task, run, CancelledError, sleep, gather, all_tasks, Event
 from contextlib import suppress
 from os import path, remove, mkdir
 from time import time
@@ -88,16 +87,16 @@ class Manager:
         if not path.exists("config"):
             self.print.print_to_logs("Creating new config folder", self.print.YELLOW)
             mkdir("config")
-        if path.exists("config.ini"):
-            self.print.print_to_logs("Importing config file from app root", self.print.YELLOW)
-            config = configparser.ConfigParser()
-            config.read("config.ini")
-            data = {}
-            for section in config.sections():
-                data[section] = dict(config.items(section))
-            with open(f"{CONFIG_FILE}", "w", encoding="utf-8") as json_file:
-                json.dump(data, json_file, indent=4)
-            remove("config.ini")
+        # if path.exists("config.ini"):
+        #     self.print.print_to_logs("Importing config file from app root", self.print.YELLOW)
+        #     config = configparser.ConfigParser()
+        #     config.read("config.ini")
+        #     data = {}
+        #     for section in config.sections():
+        #         data[section] = dict(config.items(section))
+        #     with open(f"{CONFIG_FILE}", "w", encoding="utf-8") as json_file:
+        #         json.dump(data, json_file, indent=4)
+        #     remove("config.ini")
 
         self.print.print_to_logs("Checking config file existence", self.print.BRIGHT_PURPLE)
         if path.exists(f"{CONFIG_FILE}"):
@@ -225,7 +224,7 @@ class Manager:
 
         return str(path.join(base_path, relative_path))
 
-    def start_server(self):
+    def create_server(self):
         self.quart.app.secret_key = secrets.token_hex(64)
         uvicorn_config = uvicorn.Config(self.quart.app, host="localhost", port=5000,
                                         ssl_certfile=self.resource_path("localhost.ecc.crt"),
@@ -290,7 +289,7 @@ class Manager:
             self.set_config("spotify-token", "refresh_token", refresh_token)
             self.set_config("spotify-token", "expires_at", str(expires_at))
             self.print.print_to_logs(f"New Token Acquired! {access_token}, {refresh_token}, {expires_at}",
-                          self.print.BRIGHT_PURPLE)
+                                     self.print.BRIGHT_PURPLE)
             self.save_config()
         else:
             self.print.print_to_logs(f"Failed to refresh Spotify token: {response.status}", self.print.YELLOW)
@@ -310,14 +309,9 @@ class Manager:
         self.authentication_flag.set()
         await self.await_authentication()
 
-    async def core_loop(self):
-        while not self.shutdown_flag.is_set():
-            await sleep(300)
-            await self.check_tokens()
-
     async def check_spotify(self):
         if (not is_string_valid(self.configuration["spotify-token"]["expires_at"]) or
-               not is_string_valid(self.configuration["spotify-token"]["refresh_token"]) or
+                not is_string_valid(self.configuration["spotify-token"]["refresh_token"]) or
                 not is_string_valid(self.configuration["spotify-token"]["access_token"])):
             self.print.print_to_logs("No Token", self.print.RED)
             await self.start_spotify_oauth_flow()
@@ -368,12 +362,16 @@ class Manager:
                 await task
         self.print.print_to_logs("Cleanup complete. Exiting...", self.print.BRIGHT_PURPLE)
 
+    async def core_loop(self):
+        while not self.shutdown_flag.is_set():
+            await sleep(300)
+            await self.check_tokens()
+
     async def main(self):
         try:
-            self.tasks["quart"] = create_task(self.start_server().serve())
+            self.tasks["quart"] = create_task(self.create_server().serve())
             await self.check_tokens()
-            self.bot = TwitchBot(self)
-            self.tasks["bot"] = create_task(self.bot.start())
+            self.tasks["bot"] = create_task(self.create_new_bot())
             self.tasks["updater"] = create_task(self.core_loop())
             tasks = [self.tasks["quart"], self.tasks["updater"], self.tasks["bot"]]
             await gather(*tasks)
@@ -381,7 +379,8 @@ class Manager:
             self.print.print_to_logs("Shutting down...", PrintColors.YELLOW)
         except Exception as e:
             self.print.print_to_logs(e, PrintColors.RED)
-            await self.shutdown()
+        self.print.print_to_logs("Shutting down...", PrintColors.YELLOW)
+        await self.shutdown()
 
 
 if __name__ == "__main__":

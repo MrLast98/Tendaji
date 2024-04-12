@@ -44,7 +44,8 @@ def parse_song(song):
 class TwitchBot(commands.Bot):
     def __init__(self, manager):
         self.manager = manager
-        self.manager.print.print_to_logs(f"Connecting to {self.manager.configuration['twitch']['channel']}", self.manager.print.GREEN)
+        self.manager.print.print_to_logs(f"Connecting to {self.manager.configuration['twitch']['channel']}",
+                                         self.manager.print.GREEN)
         self.channel = self.manager.configuration['twitch']['channel']
         self.queue = []
         self.token_flag = Event()
@@ -171,5 +172,5 @@ class TwitchBot(commands.Bot):
                 })
                 print_queue_to_file(self.queue)
                 self.manager.print.print_to_logs(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]} alla coda!',
-                              self.manager.print.BRIGHT_PURPLE)
+                                                 self.manager.print.BRIGHT_PURPLE)
                 await ctx.send(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]}!')
