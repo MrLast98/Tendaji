@@ -230,7 +230,8 @@ class Manager:
                                         ssl_certfile=self.resource_path("localhost.ecc.crt"),
                                         ssl_keyfile=self.resource_path("localhost.ecc.key"),
                                         loop="asyncio", log_level="info")
-        return uvicorn.Server(config=uvicorn_config)
+        server = uvicorn.Server(config=uvicorn_config)
+        self.tasks["quart"] = create_task(server.serve())
 
     @property
     def auth_manager(self):
@@ -239,16 +240,16 @@ class Manager:
                             redirect_uri=self.configuration["spotify"]["redirect_uri"],
                             scope=SCOPE_SPOTIFY)
 
-    async def create_new_bot(self) -> Coroutine:
+    async def create_new_bot(self):
         if self.bot is not None and self.tasks["bot"] is not None:
             self.print.print_to_logs("Shutting down task", self.print.YELLOW)
-            self.bot.close()
             try:
+                self.bot.close()
                 await self.tasks["bot"]
             except CancelledError:
                 pass
         self.bot = TwitchBot(self)
-        return self.bot.start()
+        self.tasks["bot"] = create_task(self.bot.start())
 
     async def update_twitch_token(self):
         params = {
@@ -332,14 +333,14 @@ class Manager:
             self.print.print_to_logs("Twitch token missing. Retrieving...", self.print.RED)
             await self.start_twitch_oauth_flow()
             self.save_config()
-            self.tasks["bot"] = create_task(self.create_new_bot())
+            await self.create_new_bot()
         elif (is_string_valid(self.configuration["twitch-token"]["expires_at"]) and (
                 int(self.configuration["twitch-token"]["expires_at"]) < int(time())) or
               abs(int(time()) - int(self.configuration["twitch-token"]["expires_at"])) <= 300):
             self.print.print_to_logs("Expired Twitch Token", self.print.YELLOW)
             await self.update_twitch_token()
             self.save_config()
-            self.tasks["bot"] = create_task(self.create_new_bot())
+            await self.create_new_bot()
         else:
             self.print.print_to_logs("Twitch is OK!", self.print.GREEN)
 
@@ -369,18 +370,17 @@ class Manager:
 
     async def main(self):
         try:
-            self.tasks["quart"] = create_task(self.create_server().serve())
+            self.create_server()
             await self.check_tokens()
-            self.tasks["bot"] = create_task(self.create_new_bot())
+            await self.create_new_bot()
             self.tasks["updater"] = create_task(self.core_loop())
             tasks = [self.tasks["quart"], self.tasks["updater"], self.tasks["bot"]]
             await gather(*tasks)
         except KeyboardInterrupt:
-            self.print.print_to_logs("Shutting down...", PrintColors.YELLOW)
+            await self.shutdown()
         except Exception as e:
             self.print.print_to_logs(e, PrintColors.RED)
-        self.print.print_to_logs("Shutting down...", PrintColors.YELLOW)
-        await self.shutdown()
+            await self.shutdown()
 
 
 if __name__ == "__main__":
