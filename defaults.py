@@ -7,7 +7,6 @@ EN_DEFAULTS = {
         "channel": "Channel you want to join in",
         "client_id": "Client ID",
         "client_secret": "Client Secret"
-
     },
     "errors": {
         "twitch_bot": {
@@ -16,4 +15,20 @@ EN_DEFAULTS = {
     },
     "insert_missing_configuration": "Please, enter the ",
     "section_missing": ""
+}
+
+DEFAULT_COMMANDS = {
+    "simple": {
+        "hello": {
+            "message": "hello [sender]",
+            "level": "ANY",
+            "enabled": True
+        },
+        "hotpants": {
+            "message": "You're the shit [sender]",
+            "level": "SUB",
+            "enabled": True
+        },
+    },
+    "complex": {}
 }

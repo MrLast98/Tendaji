@@ -8,6 +8,7 @@ from asyncio import sleep, Event
 from twitchio.ext import commands
 from twitchio.ext.commands import Context
 
+from defaults import DEFAULT_COMMANDS
 from manager_utils import PrintColors
 
 COMMANDS_FILE = 'config/commands.json'
@@ -49,25 +50,13 @@ class TwitchBot(commands.Bot):
         self.channel = self.manager.configuration['twitch']['channel']
         self.queue = []
         self.token_flag = Event()
-        # self.await_token()
+        self.complex_commands = {}
         super().__init__(token=self.manager.configuration['twitch-token']['access_token'], prefix="!",
                          initial_channels=["#" + self.channel])
 
     async def event_ready(self):
-        if os.path.exists(COMMANDS_FILE):
-            with open(COMMANDS_FILE, "r") as f:
-                commands_json = json.load(f)
-            for command, message in commands_json.items():
-                async def command_handler(ctx: commands.Context, msg=message):
-                    msg = replace_keywords(msg, ctx)
-                    await ctx.send(msg)
-
-                # Dynamically set the name of the handler to match the command
-                command_handler.__name__ = command
-                # Use the command decorator to register the command
-                self.manager.print.print_to_logs(f"Registered command {command}", self.manager.print.BRIGHT_PURPLE)
-                self.command(name=command)(command_handler)
-        self.manager.print.print_to_logs(f'Logged in as | {self.nick} to {self.channel}', self.manager.print.GREEN)
+        self.load_commands()
+        self.manager.print.print_to_logs(f'Logged in as {self.nick} to {self.channel}', self.manager.print.GREEN)
 
     async def event_message(self, message):
         # Messages with echo set to True are messages sent by the bot...
@@ -85,25 +74,87 @@ class TwitchBot(commands.Bot):
     async def event_command_error(self, context: Context, error: Exception) -> None:
         if isinstance(error, commands.CommandNotFound):
             return
+        self.manager.print.print_to_logs(f"{error}", PrintColors.RED)
 
-        self.manager.print.print_to_logs(f"ERROR: Missing command. {error}", PrintColors.RED)
-
-    async def await_token(self):
-        while self.token_flag.is_set():
-            await sleep(1)
-        self.token_flag.clear()
-
-    def is_user_allowed(self, ctx):
-        author = ctx.author
-        if author.is_subscriber or author.is_vip or author.is_mod or author.is_broadcaster:
-            return True
+    def load_commands(self):
+        if os.path.exists(COMMANDS_FILE):
+            with open(COMMANDS_FILE, "r") as f:
+                commands_json = json.load(f)
+            self.load_simple_commands(commands_json=commands_json["simple"])
+            self.set_complex_commands(commands_json=commands_json["complex"])
         else:
-            self.manager.print.print_to_logs("User not allowed to send messages", self.manager.print.RED)
-            return False
+            self.manager.print.print_to_logs("Commands file not found", self.manager.print.RED)
+            self.manager.print.print_to_logs("Creating new one with default commands", self.manager.print.WHITE)
+            defaults = DEFAULT_COMMANDS
+            for command, _ in self.commands.items():
+                defaults["complex"][command] = {}
+                defaults["complex"][command]["enabled"] = True
+                defaults["complex"][command]["level"] = "ANY"
+            with open("config/commands.json", "w", encoding="utf-8") as f:
+                f.write(json.dumps(defaults, indent=4))
+            self.load_commands()
+
+    def load_simple_commands(self, commands_json):
+        for command, context in commands_json.items():
+            if context["enabled"]:
+                async def command_handler(ctx: commands.Context, msg=context["message"], level=context["level"]):
+                    if self.is_user_allowed(ctx, level):
+                        msg = replace_keywords(msg, ctx)
+                        await ctx.send(msg)
+
+                # Dynamically set the name of the handler to match the command
+                command_handler.__name__ = command
+                # Use the command decorator to register the command
+                self.manager.print.print_to_logs(f"Registered command {command}", self.manager.print.BRIGHT_PURPLE)
+                self.command(name=command)(command_handler)
+
+    def set_complex_commands(self, commands_json):
+        for command, context in commands_json.items():
+            if context["enabled"]:
+                self.complex_commands[command] = context["level"]
+
+    def is_user_allowed(self, ctx, level):
+        author = ctx.author
+        match level:
+            case "BROADCASTER":
+                if not author.is_broadcaster:
+                    self.manager.print.print_to_logs(f"User {author.display_name} not allowed to run this command",
+                                                     self.manager.print.YELLOW)
+                    return False
+                else:
+                    return True
+            case "MOD":
+                if not author.is_mod and not author.is_broadcaster:
+                    self.manager.print.print_to_logs(f"User {author.display_name} not allowed to run this command",
+                                                     self.manager.print.YELLOW)
+                    return False
+                else:
+                    return True
+            case "VIP":
+                if not author.is_vip and not author.is_mod and not author.is_broadcaster:
+                    self.manager.print.print_to_logs(f"User {author.display_name} not allowed to run this command",
+                                                     self.manager.print.YELLOW)
+                    return False
+                else:
+                    return True
+            case "SUB":
+                if not author.is_subscriber and not author.is_vip and not author.is_mod and not author.is_broadcaster:
+                    self.manager.print.print_to_logs(f"User {author.display_name} not allowed to run this command",
+                                                     self.manager.print.YELLOW)
+                    return False
+                else:
+                    return True
+            case "ANY":
+                return True
+            case _:
+                return True
+
+    def is_command_enabled(self, command):
+        return command in set(self.complex_commands.keys())
 
     @commands.command()
     async def sq(self, ctx: commands.Context):
-        if self.is_user_allowed(ctx):
+        if self.is_command_enabled(ctx.command.name) and self.is_user_allowed(ctx, self.complex_commands[ctx.command.name]):
             sp, sp_id = await self.manager.get_player(ctx)
             if sp is not None and sp_id is not None:
                 response = sp.queue()
@@ -114,7 +165,7 @@ class TwitchBot(commands.Bot):
 
     @commands.command()
     async def play(self, ctx: commands.Context):
-        if self.is_user_allowed(ctx):
+        if self.is_command_enabled(ctx.command.name) and self.is_user_allowed(ctx, self.complex_commands[ctx.command.name]):
             sp, sp_id = await self.manager.get_player(ctx)
             if sp is not None and sp_id is not None:
                 sp.start_playback(sp_id)
@@ -123,7 +174,7 @@ class TwitchBot(commands.Bot):
 
     @commands.command()
     async def pause(self, ctx: commands.Context):
-        if self.is_user_allowed(ctx):
+        if self.is_command_enabled(ctx.command.name) and self.is_user_allowed(ctx, self.complex_commands[ctx.command.name]):
             sp, sp_id = await self.manager.get_player(ctx)
             if sp is not None and sp_id is not None:
                 sp.pause_playback(sp_id)
@@ -132,7 +183,7 @@ class TwitchBot(commands.Bot):
 
     @commands.command()
     async def skip(self, ctx: commands.Context):
-        if self.is_user_allowed(ctx):
+        if self.is_command_enabled(ctx.command.name) and self.is_user_allowed(ctx, self.complex_commands[ctx.command.name]):
             sp, sp_id = await self.manager.get_player(ctx)
             if sp is not None and sp_id is not None:
                 sp.next_track()
@@ -142,14 +193,14 @@ class TwitchBot(commands.Bot):
 
     @commands.command()
     async def sbagliato(self, ctx: commands.Context):
-        if self.is_user_allowed(ctx):
+        if self.is_command_enabled(ctx.command.name) and self.is_user_allowed(ctx, self.complex_commands[ctx.command.name]):
             sp, sp_id = await self.manager.get_player(ctx)
             if sp is not None and sp_id is not None:
                 await ctx.send("Oh No")
 
     @commands.command()
     async def sr(self, ctx: commands.Context):
-        if self.is_user_allowed(ctx):
+        if self.is_command_enabled(ctx.command.name) and self.is_user_allowed(ctx, self.complex_commands[ctx.command.name]):
             sp, _ = await self.manager.get_player(ctx)
             if sp is not None:
                 song = ctx.message.content.strip("!sr")

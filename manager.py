@@ -5,7 +5,6 @@ from asyncio import create_task, run, CancelledError, sleep, gather, all_tasks, 
 from contextlib import suppress
 from os import path, remove, mkdir
 from time import time
-from typing import Coroutine
 from urllib.parse import urlencode
 from webbrowser import open as wbopen
 
@@ -87,16 +86,6 @@ class Manager:
         if not path.exists("config"):
             self.print.print_to_logs("Creating new config folder", self.print.YELLOW)
             mkdir("config")
-        # if path.exists("config.ini"):
-        #     self.print.print_to_logs("Importing config file from app root", self.print.YELLOW)
-        #     config = configparser.ConfigParser()
-        #     config.read("config.ini")
-        #     data = {}
-        #     for section in config.sections():
-        #         data[section] = dict(config.items(section))
-        #     with open(f"{CONFIG_FILE}", "w", encoding="utf-8") as json_file:
-        #         json.dump(data, json_file, indent=4)
-        #     remove("config.ini")
 
         self.print.print_to_logs("Checking config file existence", self.print.BRIGHT_PURPLE)
         if path.exists(f"{CONFIG_FILE}"):
@@ -106,6 +95,7 @@ class Manager:
             self.print.print_to_logs("Config file not found!", self.print.RED)
             self.print.print_to_logs("Creating new one and generating Quart app secret..", self.print.YELLOW)
             save_configuration_to_json(self, CONFIG_FILE)
+
         self.setup()
         self.save_config()
         self.print.print_to_logs("Configuration Loaded", self.print.GREEN)
@@ -145,15 +135,6 @@ class Manager:
         if path.exists(QUEUE_FILE):
             remove(QUEUE_FILE)
             self.print.print_to_logs("Cleared queue", self.print.BRIGHT_PURPLE)
-
-        self.print.print_to_logs("Checking commands file existence", self.print.BRIGHT_PURPLE)
-        if path.exists(COMMANDS_FILE):
-            self.print.print_to_logs("Commands found! Loading...", self.print.GREEN)
-        else:
-            self.print.print_to_logs("Commands file not found", self.print.RED)
-            self.print.print_to_logs("Creating new one with no commands", self.print.WHITE)
-            with open("config/commands.json", "w", encoding="utf-8") as f:
-                f.write(json.dumps({"example": "[sender] this is an example command"}))
 
     async def get_player(self, ctx: commands.Context = None) -> (Spotify, str):
         sp = spotipy.Spotify(auth=self.configuration["spotify-token"]["access_token"])
@@ -369,20 +350,23 @@ class Manager:
             await self.check_tokens()
 
     async def main(self):
-        try:
-            self.create_server()
-            await self.check_tokens()
-            await self.create_new_bot()
-            self.tasks["updater"] = create_task(self.core_loop())
-            tasks = [self.tasks["quart"], self.tasks["updater"], self.tasks["bot"]]
-            await gather(*tasks)
-        except KeyboardInterrupt:
-            await self.shutdown()
-        except Exception as e:
-            self.print.print_to_logs(e, PrintColors.RED)
-            await self.shutdown()
+        self.create_server()
+        await self.check_tokens()
+        await self.create_new_bot()
+        self.tasks["updater"] = create_task(self.core_loop())
+        tasks = [self.tasks["quart"], self.tasks["updater"], self.tasks["bot"]]
+        await gather(*tasks)
+
+        # except Exception as e:
+        #     self.print.print_to_logs(e, PrintColors.RED)
+        #     await self.shutdown()
 
 
 if __name__ == "__main__":
     manager = Manager()
-    run(manager.main())
+    try:
+        run(manager.main())
+    except KeyboardInterrupt:
+        pass
+    finally:
+        manager.shutdown()
