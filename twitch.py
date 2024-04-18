@@ -11,6 +11,8 @@ from twitchio.ext.commands import Context
 from defaults import DEFAULT_COMMANDS
 from manager_utils import PrintColors
 
+from spotify import get_player, pause, add_song_id, play, query_for_song, get_track_by_id, skip, get_queue
+
 COMMANDS_FILE = 'config/commands.json'
 config = configparser.ConfigParser()
 KEYWORD_PATTERN = r'\[([^\]]+)\]'
@@ -153,43 +155,32 @@ class TwitchBot(commands.Bot):
         return command in set(self.complex_commands.keys())
 
     @commands.command()
-    async def sq(self, ctx: commands.Context):
+    async def song(self, ctx: commands.Context):
         if self.is_command_enabled(ctx.command.name) and self.is_user_allowed(ctx, self.complex_commands[ctx.command.name]):
-            sp, sp_id = await self.manager.get_player(ctx)
-            if sp is not None and sp_id is not None:
-                response = sp.queue()
-                currently_playing = parse_song(response["currently_playing"])
-                # queue = [parse_song(a) for a in response["queue"]]
-
-                await ctx.send(currently_playing["name"])
+            response = get_queue(self.manager.configuration["spotify-token"]["access_token"])
+            currently_playing = parse_song(response["currently_playing"])
+            await ctx.send(currently_playing["name"])
 
     @commands.command()
     async def play(self, ctx: commands.Context):
         if self.is_command_enabled(ctx.command.name) and self.is_user_allowed(ctx, self.complex_commands[ctx.command.name]):
-            sp, sp_id = await self.manager.get_player(ctx)
-            if sp is not None and sp_id is not None:
-                sp.start_playback(sp_id)
-                self.manager.print.print_to_logs("Resumed!", PrintColors.YELLOW)
-                await ctx.send('Resumed!')
+            play(self.manager.configuration["spotify-token"]["access_token"])
+            self.manager.print.print_to_logs("Resumed!", PrintColors.YELLOW)
+            await ctx.send('Resumed!')
 
     @commands.command()
     async def pause(self, ctx: commands.Context):
         if self.is_command_enabled(ctx.command.name) and self.is_user_allowed(ctx, self.complex_commands[ctx.command.name]):
-            sp, sp_id = await self.manager.get_player(ctx)
-            if sp is not None and sp_id is not None:
-                sp.pause_playback(sp_id)
-                self.manager.print.print_to_logs("Paused!", self.manager.print.YELLOW)
-                await ctx.send('Paused!')
+            pause(self.manager.configuration["spotify-token"]["access_token"])
+            self.manager.print.print_to_logs("Paused!", self.manager.print.YELLOW)
+            await ctx.send('Paused!')
 
     @commands.command()
     async def skip(self, ctx: commands.Context):
         if self.is_command_enabled(ctx.command.name) and self.is_user_allowed(ctx, self.complex_commands[ctx.command.name]):
-            sp, sp_id = await self.manager.get_player(ctx)
-            if sp is not None and sp_id is not None:
-                sp.next_track()
-                # self.queue.pop(0)
-                self.manager.print.print_to_logs("Skipped!", self.manager.print.YELLOW)
-                await ctx.send('Skipped!')
+            skip(self.manager.configuration["spotify-token"]["access_token"])
+            self.manager.print.print_to_logs("Skipped!", self.manager.print.YELLOW)
+            await ctx.send('Skipped!')
 
     @commands.command()
     async def sbagliato(self, ctx: commands.Context):
@@ -201,27 +192,23 @@ class TwitchBot(commands.Bot):
     @commands.command()
     async def sr(self, ctx: commands.Context):
         if self.is_command_enabled(ctx.command.name) and self.is_user_allowed(ctx, self.complex_commands[ctx.command.name]):
-            sp, _ = await self.manager.get_player(ctx)
-            if sp is not None:
-                song = ctx.message.content.strip("!sr")
-
-                if re.search(url_pattern, song):
-                    song = song.split("/")[-1]
-                    if "?" in song:
-                        song = song.split("?")[0]
-                    query = sp.track(song)
-                    sp.add_to_queue(f"spotify:track:{song}")
-                else:
-                    query = sp.search(song, type="track")
-                    query = query["tracks"]["items"][0]
-                    sp.add_to_queue(query["uri"])
-                self.queue.append({
-                    "title": f'{query["name"]}',
-                    "author": f"{query['artists'][0]['name']}",
-                    "requested_by": f"{ctx.author.display_name}",
-                    "duration": query["duration_ms"]
-                })
-                print_queue_to_file(self.queue)
-                self.manager.print.print_to_logs(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]} alla coda!',
-                                                 self.manager.print.BRIGHT_PURPLE)
-                await ctx.send(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]}!')
+            song = ctx.message.content.strip("!sr ")
+            if re.search(url_pattern, song):
+                song = song.split("/")[-1]
+                if "?" in song:
+                    song = song.split("?")[0]
+                query = get_track_by_id(self.manager.configuration["spotify-token"]["access_token"], song)
+                add_song_id(self.manager.configuration["spotify-token"]["access_token"], song)
+            else:
+                query = query_for_song(self.manager.configuration["spotify-token"]["access_token"], song)
+                add_song_id(self.manager.configuration["spotify-token"]["access_token"], query["id"])
+            # self.queue.append({
+            #     "title": f'{query["name"]}',
+            #     "author": f"{query['artists'][0]['name']}",
+            #     "requested_by": f"{ctx.author.display_name}",
+            #     "duration": query["duration_ms"]
+            # })
+            # print_queue_to_file(self.queue)
+            self.manager.print.print_to_logs(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]} alla coda!',
+                                             self.manager.print.BRIGHT_PURPLE)
+            await ctx.send(f'Aggiunto {query["name"]} - {query["artists"][0]["name"]}!')

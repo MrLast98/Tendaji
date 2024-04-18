@@ -2,7 +2,6 @@ import json
 import secrets
 import sys
 from asyncio import create_task, run, CancelledError, sleep, gather, all_tasks, Event
-from contextlib import suppress
 from os import path, remove, mkdir
 from time import time
 from urllib.parse import urlencode
@@ -334,14 +333,17 @@ class Manager:
         await self.check_spotify()
 
     async def shutdown(self):
+        if self.shutdown_flag.is_set():
+            return  # Shutdown already initiated, do nothing
+        self.shutdown_flag.set()  # Set the flag to indicate shutdown has started
         self.print.print_to_logs("Initiating shutdown...", self.print.BRIGHT_PURPLE)
-        await self.bot.close()
-        self.save_config()
-        self.shutdown_flag.set()
+        # Cancel all tasks
         for task in all_tasks():
             task.cancel()
-            with suppress(CancelledError):
-                await task
+        # Await all tasks to ensure they complete their cleanup
+        await gather(*all_tasks(), return_exceptions=True)
+        # Perform any additional cleanup here
+        self.save_config()
         self.print.print_to_logs("Cleanup complete. Exiting...", self.print.BRIGHT_PURPLE)
 
     async def core_loop(self):
@@ -367,6 +369,6 @@ if __name__ == "__main__":
     try:
         run(manager.main())
     except KeyboardInterrupt:
-        pass
+        manager.shutdown()
     finally:
         manager.shutdown()
