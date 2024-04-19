@@ -94,7 +94,8 @@ class Manager:
         self.setup()
         # self.save_config()
         self.print.print_to_logs("Configuration Loaded", self.print.GREEN)
-        self.print.print_to_logs("Wanna reset the tokens?[Y/]", self.print.WHITE)
+        # self.print.print_to_logs("Wanna reset the tokens?[Y/]", self.print.WHITE)
+        print("Do you want to reset the tokens? [Y/]")
         i = input("> ")
         if "y" in i.lower():
             with open(CONFIG_FILE, 'r', encoding="utf-8") as f:
