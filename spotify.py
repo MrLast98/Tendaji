@@ -1,87 +1,16 @@
+import re
+import string
 from urllib.parse import quote
 
-from flask import Flask, request, jsonify
-import requests
 import base64
-import json
-import threading
-
-# app = Flask(__name__)
-
-# Replace these with your actual credentials
-client_id = 'YOUR_CLIENT_ID'
-client_secret = 'YOUR_CLIENT_SECRET'
-redirect_uri = 'http://localhost:3000/callback'
+import hashlib
+import requests
+import secrets
 
 
-# OAuth2 login
-def get_token():
-    auth_url = 'https://accounts.spotify.com/authorize'
-    token_url = 'https://accounts.spotify.com/api/token'
-    scope = 'user-modify-playback-state user-read-playback-state'
-    auth_response = requests.get(auth_url, params={
-        'response_type': 'code',
-        'client_id': client_id,
-        'scope': scope,
-        'redirect_uri': redirect_uri
-    })
-    print(f"Please go to {auth_response.url} and authorize access.")
-
-    # Start the Flask server in a separate thread
-    server_thread = threading.Thread(target=app.run, kwargs={'port': 3000})
-    server_thread.start()
-
-    # Wait for the server to start
-    # while not app.is_running:
-    #     pass
-
-    # The server will handle the callback and set the access token
-    # This function will return once the token is obtained
-
-
-# Callback endpoint
-# @app.route('/callback')
-# def callback():
-#     auth_code = request.args.get('code')
-#     token_url = 'https://accounts.spotify.com/api/token'
-#     headers = {
-#         'Authorization': 'Basic ' + base64.b64encode(f"{client_id}:{client_secret}".encode()).decode('utf-8'),
-#         'Content-Type': 'application/x-www-form-urlencoded'
-#     }
-#     data = {
-#         'grant_type': 'authorization_code',
-#         'code': auth_code,
-#         'redirect_uri': redirect_uri,
-#         'client_id': client_id,
-#         'client_secret': client_secret
-#     }
-#     response = requests.post(token_url, headers=headers, data=data)
-#     response_data = response.json()
-#     access_token = response_data['access_token']
-#     refresh_token = response_data['refresh_token']
-#     # Here you can store the tokens as needed
-#     print(f"Access Token: {access_token}")
-#     print(f"Refresh Token: {refresh_token}")
-#     return jsonify({'status': 'success'})
-
-
-# Refresh token function
-def refresh_token(refresh_token):
-    token_url = 'https://accounts.spotify.com/api/token'
-    headers = {
-        'Authorization': 'Basic ' + base64.b64encode(f"{client_id}:{client_secret}".encode()).decode('utf-8'),
-        'Content-Type': 'application/x-www-form-urlencoded'
-    }
-    data = {
-        'grant_type': 'refresh_token',
-        'refresh_token': refresh_token
-    }
-    response = requests.post(token_url, headers=headers, data=data)
-    response_data = response.json()
-    new_access_token = response_data['access_token']
-    # Here you can store the new access token as needed
-    print(f"New Access Token: {new_access_token}")
-    return new_access_token
+SPOTIFY_AUTHORIZATION_URL = "https://accounts.spotify.com/authorize"
+OAUTH_SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
+SCOPE_SPOTIFY = "user-read-playback-state user-modify-playback-state"
 
 
 # Getting the player
@@ -100,6 +29,7 @@ def add_song_query(token, query):
     add_song_id(token, track_id)
 
 
+# Look up song from query
 def query_for_song(token, query):
     headers = {'Authorization': f'Bearer {token}'}
     query = quote(query)
@@ -107,6 +37,7 @@ def query_for_song(token, query):
     return search_response.json()['tracks']['items'][0]
 
 
+# Get song data from ID
 def get_track_by_id(token, track_id):
     headers = {'Authorization': f'Bearer {token}'}
     track_url = f'https://api.spotify.com/v1/tracks/{track_id}'
@@ -148,3 +79,52 @@ def skip(token):
     headers = {'Authorization': f'Bearer {token}'}
     response = requests.post('https://api.spotify.com/v1/me/player/next', headers=headers)
     return response.status_code
+
+
+# Get currently playing track
+def get_current_track(token):
+    headers = {'Authorization': f'Bearer {token}'}
+    response = requests.post('https://api.spotify.com/v1/me/player/currently-playing', headers=headers)
+    return response.status_code
+
+
+# Generate Code Verifier and Code Challenge
+def generate_code_verifier_and_challenge():
+    # Generate a code verifier with a random length between 43 and 128 characters
+    length = secrets.choice(range(43, 129))
+    code_verifier = ''.join(secrets.choice(string.ascii_letters + string.digits + '-._~') for _ in range(length))
+
+    # Create the code challenge by hashing the code verifier with SHA-256 and encoding the hash with BASE64URL
+    code_challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest()).decode('utf-8').rstrip('=')
+
+    return code_verifier, code_challenge
+
+
+# Get Authorization Code
+def get_authorization_code(client_id, redirect_uri, code_challenge, state):
+    state = base64.urlsafe_b64encode(hashlib.sha256(state.encode()).digest()).decode('utf-8')
+    return f"{SPOTIFY_AUTHORIZATION_URL}?response_type=code&client_id={client_id}&scope={SCOPE_SPOTIFY}&redirect_uri={redirect_uri}&state={state}&code_challenge={code_challenge}&code_challenge_method=S256"
+
+
+# Exchange Authorization Code for Tokens
+def get_token(client_id, redirect_uri, code, code_verifier):
+    payload = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": redirect_uri,
+        "client_id": client_id,
+        "code_verifier": code_verifier
+    }
+    response = requests.post(OAUTH_SPOTIFY_TOKEN_URL, data=payload)
+    return response.json()
+
+
+# Refresh the Token
+def refresh_access_token(client_id, refresh_token):
+    payload = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": client_id,
+    }
+    response = requests.post(OAUTH_SPOTIFY_TOKEN_URL, data=payload)
+    return response.json()

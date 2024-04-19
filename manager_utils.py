@@ -2,7 +2,7 @@ import json
 import os
 from datetime import datetime
 
-debug = not os.path.exists("config/.debug")
+DEBUG = not os.path.exists("config/.debug")
 
 
 class PrintColors:
@@ -27,7 +27,7 @@ class PrintColors:
                 self.log_queue.append((f"LOGS CREATED  - {file_name}", PrintColors.YELLOW))
             self.log_queue.append((message, color))
             return
-        elif os.path.exists(file_name) and len(self.log_queue) > 0:
+        if os.path.exists(file_name) and len(self.log_queue) > 0:
             for msg, msg_color in self.log_queue:
                 new_print(msg, msg_color)
             self.log_queue = []
@@ -43,7 +43,7 @@ def new_print(message, color):
     message = f"{timestamp} | {color}{level}{PrintColors.WHITE}: {color}{message}{PrintColors.WHITE}"
     current_date = datetime.now().strftime("%d-%m-%Y")
     file_name = f"logs/logs-{current_date}.txt"
-    # if debug:
+    # if DEBUG:
     print(message)
     # Open the log file and append the log entry
     with open(file_name, 'a', encoding='utf-8') as file:
@@ -74,6 +74,9 @@ def save_configuration_to_json(self, filename):
 def load_configuration_from_json(self, filename):
     with open(filename, 'r') as f:
         self.configuration = json.load(f)
+    # TODO: Remove this next version
+    if "spotify" in self.configuration and "client_secret" in self.configuration["spotify"]:
+        del self.configuration["spotify"]["client_secret"]
 
 
 def check_dict_structure(input_dict, sections):

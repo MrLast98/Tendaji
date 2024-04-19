@@ -7,15 +7,13 @@ from time import time
 from urllib.parse import urlencode
 from webbrowser import open as wbopen
 
-import spotipy
 import uvicorn
 from aiohttp import ClientSession
-from spotipy import SpotifyOAuth, Spotify, SpotifyException
-from twitchio.ext import commands
 
 from manager_utils import PrintColors, load_configuration_from_json, save_configuration_to_json, return_date_string, \
     check_dict_structure, is_string_valid
 from quart_server import QuartServer
+from spotify import get_authorization_code, generate_code_verifier_and_challenge, refresh_access_token
 from translations import TranslationManager
 from twitch import TwitchBot
 
@@ -28,8 +26,6 @@ QUEUE_FILE = "queue.json"
 CONFIG_FILE = "config/config.json"
 
 # Necessary Links for authorization
-SPOTIFY_AUTHORIZATION_URL = "https://accounts.spotify.com/authorize"
-OAUTH_SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 TWITCH_AUTHORIZATION_URL = "https://id.twitch.tv/oauth2/authorize"
 TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token"
 
@@ -43,6 +39,7 @@ class Manager:
         self.quart = None
         self.updater = None
         self.bot = None
+        self.verify = None
         self.configuration = {
             "app": {
                 "last_opened": None,
@@ -55,7 +52,6 @@ class Manager:
             },
             "spotify": {
                 "client_id": None,
-                "client_secret": None,
                 "redirect_uri": None
             },
             "twitch-token": {
@@ -93,32 +89,31 @@ class Manager:
         else:
             self.print.print_to_logs("Config file not found!", self.print.RED)
             self.print.print_to_logs("Creating new one and generating Quart app secret..", self.print.YELLOW)
-            save_configuration_to_json(self, CONFIG_FILE)
+            self.save_config()
 
         self.setup()
-        self.save_config()
+        # self.save_config()
         self.print.print_to_logs("Configuration Loaded", self.print.GREEN)
-
-        print("Wanna reset the tokens?[Y/]")
+        self.print.print_to_logs("Wanna reset the tokens?[Y/]", self.print.WHITE)
         i = input("> ")
-        if i.lower() == "y":
+        if "y" in i.lower():
             with open(CONFIG_FILE, 'r', encoding="utf-8") as f:
                 data = json.load(f)
 
             # Reset tokens to empty strings
-            data["twitch-token"]["access_token"] = ""
-            data["twitch-token"]["refresh_token"] = ""
-            data["twitch-token"]["expires_at"] = ""
-            data["spotify-token"]["access_token"] = ""
-            data["spotify-token"]["refresh_token"] = ""
-            data["spotify-token"]["expires_at"] = ""
-
+            self.set_config("twitch-token", "expires_at", "")
+            self.set_config("twitch-token", "access_token", "")
+            self.set_config("twitch-token", "refresh_token", "")
+            self.set_config("spotify-token", "access_token", "")
+            self.set_config("spotify-token", "refresh_token", "")
+            self.set_config("spotify-token", "expires_at", "")
+            self.print.print_to_logs("Token for Spotify and Twitch correctly reset!", self.print.GREEN)
             # Write the updated data back to the file
             with open(CONFIG_FILE, 'w', encoding="utf-8") as f:
                 json.dump(data, f, indent=4)
 
         filename = f"logs/logs-{return_date_string()}.txt"
-        if not path.exists(filename):
+        if not path.exists(filename) and "y" not in i.lower():
             with open(filename, "w", encoding="utf-8") as f:
                 f.write(f"LOGS CREATION - {filename}\n")
             self.print.print_to_logs("New Logs generated!", self.print.YELLOW)
@@ -135,25 +130,12 @@ class Manager:
             remove(QUEUE_FILE)
             self.print.print_to_logs("Cleared queue", self.print.BRIGHT_PURPLE)
 
-    async def get_player(self, ctx: commands.Context = None) -> (Spotify, str):
-        sp = spotipy.Spotify(auth=self.configuration["spotify-token"]["access_token"])
-        try:
-            devices = sp.devices()
-        except SpotifyException:
-            self.print.print_to_logs("Expired Spotify Token", PrintColors.YELLOW)
-            await self.refresh_spotify_token()
-        for a in devices["devices"]:
-            if a["is_active"]:
-                return sp, a['id']
-        if ctx:
-            await ctx.send(self.translation_manager.get_errors("twitch_bot", "missing_player"))
-        return None, None
 
     def setup(self):
         sections = {
             "app": ["last_opened", "selected_language"],
             "twitch": ["channel", "client_id", "client_secret"],
-            "spotify": ["client_id", "redirect_uri", "client_secret"],
+            "spotify": ["client_id", "redirect_uri"],
             "twitch-token": ["access_token", "refresh_token", "expires_at"],
             "spotify-token": ["access_token", "refresh_token", "expires_at"]
         }
@@ -169,7 +151,7 @@ class Manager:
                     case "selected_language":
                         self.configuration[section][item] = "en"
                     case _:
-                        if section == "twitch" or section == "spotify":
+                        if section in ('twitch', 'spotify'):
                             question = self.translation_manager.get_translation("insert_missing_configuration")
                             section_name = self.translation_manager.get_dictionary(section)
                             item_name = self.translation_manager.get_dictionary(item)
@@ -213,18 +195,11 @@ class Manager:
         server = uvicorn.Server(config=uvicorn_config)
         self.tasks["quart"] = create_task(server.serve())
 
-    @property
-    def auth_manager(self):
-        return SpotifyOAuth(client_id=self.configuration["spotify"]["client_id"],
-                            client_secret=self.configuration["spotify"]["client_secret"],
-                            redirect_uri=self.configuration["spotify"]["redirect_uri"],
-                            scope=SCOPE_SPOTIFY)
-
     async def create_new_bot(self):
         if self.bot is not None and self.tasks["bot"] is not None:
             self.print.print_to_logs("Shutting down task", self.print.YELLOW)
             try:
-                self.bot.close()
+                await self.bot.close()
                 await self.tasks["bot"]
             except CancelledError:
                 pass
@@ -254,14 +229,15 @@ class Manager:
                 raise Exception(f"Failed to refresh Twitch token: {response}")
 
     async def start_spotify_oauth_flow(self):
-        auth_url = self.auth_manager.get_authorize_url()
+        self.verify, challenge = generate_code_verifier_and_challenge()
+        auth_url = get_authorization_code(self.configuration["spotify"]["client_id"], self.configuration["spotify"]["redirect_uri"], challenge, self.quart.app.secret_key)
         wbopen(auth_url)
         self.authentication_flag.set()
         await self.await_authentication()
 
     async def refresh_spotify_token(self):
-        response = self.auth_manager.refresh_access_token(self.configuration["spotify-token"]["refresh_token"])
-        if response is not None:
+        response = refresh_access_token(self.configuration["spotify"]["client_id"], self.configuration["spotify-token"]["refresh_token"])
+        if response:
             access_token = response.get("access_token")
             refresh_token = response.get("refresh_token")
             expires_in = response.get("expires_in")
@@ -269,8 +245,6 @@ class Manager:
             self.set_config("spotify-token", "access_token", access_token)
             self.set_config("spotify-token", "refresh_token", refresh_token)
             self.set_config("spotify-token", "expires_at", str(expires_at))
-            self.print.print_to_logs(f"New Token Acquired! {access_token}, {refresh_token}, {expires_at}",
-                                     self.print.BRIGHT_PURPLE)
             self.save_config()
         else:
             self.print.print_to_logs(f"Failed to refresh Spotify token: {response.status}", self.print.YELLOW)

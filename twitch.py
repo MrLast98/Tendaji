@@ -3,7 +3,7 @@ import json
 import os.path
 import re
 import string
-from asyncio import sleep, Event
+from asyncio import Event
 
 from twitchio.ext import commands
 from twitchio.ext.commands import Context
@@ -11,7 +11,7 @@ from twitchio.ext.commands import Context
 from defaults import DEFAULT_COMMANDS
 from manager_utils import PrintColors
 
-from spotify import get_player, pause, add_song_id, play, query_for_song, get_track_by_id, skip, get_queue
+from spotify import pause, add_song_id, play, query_for_song, get_track_by_id, skip, get_queue
 
 COMMANDS_FILE = 'config/commands.json'
 config = configparser.ConfigParser()
@@ -123,30 +123,24 @@ class TwitchBot(commands.Bot):
                     self.manager.print.print_to_logs(f"User {author.display_name} not allowed to run this command",
                                                      self.manager.print.YELLOW)
                     return False
-                else:
-                    return True
+                return True
             case "MOD":
                 if not author.is_mod and not author.is_broadcaster:
                     self.manager.print.print_to_logs(f"User {author.display_name} not allowed to run this command",
                                                      self.manager.print.YELLOW)
                     return False
-                else:
-                    return True
+                return True
             case "VIP":
                 if not author.is_vip and not author.is_mod and not author.is_broadcaster:
                     self.manager.print.print_to_logs(f"User {author.display_name} not allowed to run this command",
                                                      self.manager.print.YELLOW)
                     return False
-                else:
-                    return True
+                return True
             case "SUB":
                 if not author.is_subscriber and not author.is_vip and not author.is_mod and not author.is_broadcaster:
                     self.manager.print.print_to_logs(f"User {author.display_name} not allowed to run this command",
                                                      self.manager.print.YELLOW)
                     return False
-                else:
-                    return True
-            case "ANY":
                 return True
             case _:
                 return True
@@ -185,9 +179,7 @@ class TwitchBot(commands.Bot):
     @commands.command()
     async def sbagliato(self, ctx: commands.Context):
         if self.is_command_enabled(ctx.command.name) and self.is_user_allowed(ctx, self.complex_commands[ctx.command.name]):
-            sp, sp_id = await self.manager.get_player(ctx)
-            if sp is not None and sp_id is not None:
-                await ctx.send("Oh No")
+            await ctx.send("Oh No")
 
     @commands.command()
     async def sr(self, ctx: commands.Context):

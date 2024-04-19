@@ -7,6 +7,7 @@ from time import time
 from quart import Quart, request, redirect, session
 from requests import post
 
+from spotify import get_token, get_current_track
 from twitch import print_queue_to_file
 
 # Configuration and Flask App
@@ -63,12 +64,11 @@ class QuartServer:
         return redirect("/currently_playing")
 
     async def callback(self):
-        token = self.manager.auth_manager.get_access_token(request.args['code'])
-        if token:
-            session['token_info'] = token
+        token = get_token(self.manager.configuration["spotify"]["client_id"], self.manager.configuration["spotify"]["redirect_uri"], request.args['code'], self.manager.verify)
+        if token.get("access_token") is not None:
             self.manager.set_config('spotify-token', 'access_token', token['access_token'])
             self.manager.set_config('spotify-token', 'refresh_token', token.get('refresh_token'))
-            self.manager.set_config('spotify-token', 'expires_at', str(token['expires_at']))
+            self.manager.set_config('spotify-token', 'expires_at', str(int(time()) + token['expires_in']))
             self.manager.authentication_flag.clear()
             self.manager.save_config()
             return '''
@@ -82,16 +82,14 @@ class QuartServer:
                 </body>
                 </html>
             '''
-        else:
-            error = "Error retrieving tokens"
-            f'''
+        return f'''
                 <!DOCTYPE html>
                 <html>
                 <head>
-                    <title>Error Occurred</title>
+                    <title>Spotify Token not Retrieved</title>
                 </head>
                 <body>
-                    <p>Error: {error}</p>
+                    <p>{token["error"]}: {token["error_description"]}</p>
                 </body>
                 </html>
                 '''
@@ -117,8 +115,7 @@ class QuartServer:
                 </body>
                 </html>
             '''
-        else:
-            return '''
+        return '''
                 <!DOCTYPE html>
                 <html>
                 <head>
@@ -131,49 +128,46 @@ class QuartServer:
             '''
 
     async def currently_playing(self):
-        sp, _ = await self.manager.get_player()
-        if sp is not None:
-            track = sp.current_playback()
-            if track is not None:
-                track_name = track['item']['name']
-                artist_name = track['item']['artists'][0]['name']
+        track = get_current_track(self.manager.configuration["spotify-token"]["access_token"])
+        if track is not None:
+            track_name = track['item']['name']
+            artist_name = track['item']['artists'][0]['name']
 
-                album_name = track['item']['album']['name']
-                album_image_url = track['item']['album']['images'][0]['url'] if track['item']['album'][
-                    'images'] else "No image available"
-                track_duration = int(track['item']["duration_ms"])
-                progress = int(track["progress_ms"])
-                if track_duration - progress >= 30000:
-                    refresh_rate = 30
-                else:
-                    refresh_rate = (track_duration - progress) / 1000 + 1  # Convert to seconds and add 1
-                    if os.path.exists(QUEUE_FILE):
-                        update_queue(track_name, artist_name)
-                next_refresh = int(time()) + refresh_rate
-                html_content = f'''
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>Currently Playing</title>
-                    <meta http-equiv="refresh" content="{refresh_rate}">
-                    <style>
-                        body {{ font-family: Arial, sans-serif; }}
-                        .album-art {{ width: 300px; }}
-                    </style>
-                </head>
-                <body>
-                    <div>
-                    <div>
-                        <h1>Currently Playing</h1>
-                        <p><strong>Track:</strong> {track_name}</p>
-                        <p><strong>Artist:</strong> {artist_name}</p>
-                        <p><strong>Album:</strong> {album_name}</p>
-                        <p><strong>Next Refresh:</strong> {datetime.fromtimestamp(next_refresh).strftime('%H:%M:%S')}</p>
-                        <img src="{album_image_url}" alt="Album art" class="album-art" />
-                    </div>
-                </body>
-                </html>
-                '''
-                return html_content
-        else:
-            return "No track is currently playing."
+            album_name = track['item']['album']['name']
+            album_image_url = track['item']['album']['images'][0]['url'] if track['item']['album'][
+                'images'] else "No image available"
+            track_duration = int(track['item']["duration_ms"])
+            progress = int(track["progress_ms"])
+            if track_duration - progress >= 30000:
+                refresh_rate = 30
+            else:
+                refresh_rate = (track_duration - progress) / 1000 + 1  # Convert to seconds and add 1
+                if os.path.exists(QUEUE_FILE):
+                    update_queue(track_name, artist_name)
+            next_refresh = int(time()) + refresh_rate
+            html_content = f'''
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Currently Playing</title>
+                <meta http-equiv="refresh" content="{refresh_rate}">
+                <style>
+                    body {{ font-family: Arial, sans-serif; }}
+                    .album-art {{ width: 300px; }}
+                </style>
+            </head>
+            <body>
+                <div>
+                <div>
+                    <h1>Currently Playing</h1>
+                    <p><strong>Track:</strong> {track_name}</p>
+                    <p><strong>Artist:</strong> {artist_name}</p>
+                    <p><strong>Album:</strong> {album_name}</p>
+                    <p><strong>Next Refresh:</strong> {datetime.fromtimestamp(next_refresh).strftime('%H:%M:%S')}</p>
+                    <img src="{album_image_url}" alt="Album art" class="album-art" />
+                </div>
+            </body>
+            </html>
+            '''
+            return html_content
+        return "No track is currently playing."

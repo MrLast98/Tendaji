@@ -6,3 +6,5 @@ localhost.ecc.crt
 localhost.ecc.key
 /dist - Copy/
 /config/
+/logs/
+/.cache
