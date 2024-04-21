@@ -1,22 +1,30 @@
-import re
+import base64
+import hashlib
+import secrets
 import string
 from urllib.parse import quote
 
-import base64
-import hashlib
 import requests
-import secrets
-
 
 SPOTIFY_AUTHORIZATION_URL = "https://accounts.spotify.com/authorize"
 OAUTH_SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 SCOPE_SPOTIFY = "user-read-playback-state user-modify-playback-state"
 
 
+# Parse the song to retrieve the data for the songs
+def parse_song(song):
+    artists = [a["name"] for a in song["artists"]]
+    return {
+        "name": song["name"],
+        "artists": ", ".join(artists),
+        "id": song["id"]
+    }
+
+
 # Getting the player
 def get_player(token):
     headers = {'Authorization': f'Bearer {token}'}
-    response = requests.get('https://api.spotify.com/v1/me/player', headers=headers)
+    response = requests.get('https://api.spotify.com/v1/me/player', headers=headers, timeout=5)
     return response.json()
 
 
@@ -24,7 +32,7 @@ def get_player(token):
 def add_song_query(token, query):
     headers = {'Authorization': f'Bearer {token}'}
     query = quote(query)
-    search_response = requests.get(f'https://api.spotify.com/v1/search?q={query}&type=track', headers=headers)
+    search_response = requests.get(f'https://api.spotify.com/v1/search?q={query}&type=track', headers=headers, timeout=5)
     track_id = search_response.json()['tracks']['items'][0]['id']
     add_song_id(token, track_id)
 
@@ -33,7 +41,7 @@ def add_song_query(token, query):
 def query_for_song(token, query):
     headers = {'Authorization': f'Bearer {token}'}
     query = quote(query)
-    search_response = requests.get(f'https://api.spotify.com/v1/search?q={query}&type=track', headers=headers)
+    search_response = requests.get(f'https://api.spotify.com/v1/search?q={query}&type=track', headers=headers, timeout=5)
     return search_response.json()['tracks']['items'][0]
 
 
@@ -41,7 +49,7 @@ def query_for_song(token, query):
 def get_track_by_id(token, track_id):
     headers = {'Authorization': f'Bearer {token}'}
     track_url = f'https://api.spotify.com/v1/tracks/{track_id}'
-    response = requests.get(track_url, headers=headers)
+    response = requests.get(track_url, headers=headers, timeout=5)
     return response.json()
 
 
@@ -49,42 +57,42 @@ def get_track_by_id(token, track_id):
 def add_song_id(token, track_id):
     headers = {'Authorization': f'Bearer {token}'}
     uri = quote(f'spotify:track:{track_id}')
-    response = requests.post(f'https://api.spotify.com/v1/me/player/queue?uri={uri}', headers=headers)
+    response = requests.post(f'https://api.spotify.com/v1/me/player/queue?uri={uri}', headers=headers, timeout=5)
     return response.status_code
 
 
 # Get the queue
 def get_queue(token):
     headers = {'Authorization': f'Bearer {token}'}
-    response = requests.get('https://api.spotify.com/v1/me/player/queue', headers=headers)
+    response = requests.get('https://api.spotify.com/v1/me/player/queue', headers=headers, timeout=5)
     return response.json()
 
 
 # Play/Resume
 def play(token):
     headers = {'Authorization': f'Bearer {token}'}
-    response = requests.put('https://api.spotify.com/v1/me/player/play', headers=headers)
+    response = requests.put('https://api.spotify.com/v1/me/player/play', headers=headers, timeout=5)
     return response.status_code
 
 
 # Pause
 def pause(token):
     headers = {'Authorization': f'Bearer {token}'}
-    response = requests.put('https://api.spotify.com/v1/me/player/pause', headers=headers)
+    response = requests.put('https://api.spotify.com/v1/me/player/pause', headers=headers, timeout=5)
     return response.status_code
 
 
 # Skip the current song
 def skip(token):
     headers = {'Authorization': f'Bearer {token}'}
-    response = requests.post('https://api.spotify.com/v1/me/player/next', headers=headers)
+    response = requests.post('https://api.spotify.com/v1/me/player/next', headers=headers, timeout=5)
     return response.status_code
 
 
 # Get currently playing track
 def get_current_track(token):
     headers = {'Authorization': f'Bearer {token}'}
-    response = requests.post('https://api.spotify.com/v1/me/player/currently-playing', headers=headers)
+    response = requests.post('https://api.spotify.com/v1/me/player/currently-playing', headers=headers, timeout=5)
     return response.status_code
 
 
@@ -115,7 +123,7 @@ def get_token(client_id, redirect_uri, code, code_verifier):
         "client_id": client_id,
         "code_verifier": code_verifier
     }
-    response = requests.post(OAUTH_SPOTIFY_TOKEN_URL, data=payload)
+    response = requests.post(OAUTH_SPOTIFY_TOKEN_URL, data=payload, timeout=5)
     return response.json()
 
 
@@ -126,5 +134,5 @@ def refresh_access_token(client_id, refresh_token):
         "refresh_token": refresh_token,
         "client_id": client_id,
     }
-    response = requests.post(OAUTH_SPOTIFY_TOKEN_URL, data=payload)
+    response = requests.post(OAUTH_SPOTIFY_TOKEN_URL, data=payload, timeout=5)
     return response.json()

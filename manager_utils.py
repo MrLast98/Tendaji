@@ -23,10 +23,12 @@ class PrintColors:
         file_name = f"logs/logs-{current_date}.txt"
         # check_log_file()
         if not os.path.exists(file_name):
-            if len(self.log_queue) == 0:
-                self.log_queue.append((f"LOGS CREATED  - {file_name}", PrintColors.YELLOW))
-            self.log_queue.append((message, color))
-            return
+            # if len(self.log_queue) == 0:
+            #     self.log_queue.append((f"LOGS CREATED  - {file_name}", PrintColors.YELLOW))
+            # self.log_queue.append((message, color))
+            # return
+            with open(file_name, 'w', encoding="utf-8"):
+                pass
         if os.path.exists(file_name) and len(self.log_queue) > 0:
             for msg, msg_color in self.log_queue:
                 new_print(msg, msg_color)
@@ -67,12 +69,12 @@ def get_level_from_color(color):
 
 
 def save_configuration_to_json(self, filename):
-    with open(filename, 'w') as f:
+    with open(filename, 'w', encoding="utf-8") as f:
         json.dump(self.configuration, f, indent=4)
 
 
 def load_configuration_from_json(self, filename):
-    with open(filename, 'r') as f:
+    with open(filename, 'r', encoding="utf-8") as f:
         self.configuration = json.load(f)
     # TODO: Remove this next version
     if "spotify" in self.configuration and "client_secret" in self.configuration["spotify"]:

@@ -26,7 +26,7 @@ class TranslationManager:
             for filename in os.listdir(TRANSLATION_FOLDER):
                 if filename.endswith(".json"):
                     language_code = os.path.splitext(filename)[0]
-                    with open(os.path.join(TRANSLATION_FOLDER, filename), "r") as file:
+                    with open(os.path.join(TRANSLATION_FOLDER, filename), "r", encoding="utf-8") as file:
                         self.translations[language_code] = json.load(file)
         else:
             self.translations["en"] = defaults.EN_DEFAULTS

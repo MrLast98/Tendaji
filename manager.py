@@ -131,7 +131,6 @@ class Manager:
             remove(QUEUE_FILE)
             self.print.print_to_logs("Cleared queue", self.print.BRIGHT_PURPLE)
 
-
     def setup(self):
         sections = {
             "app": ["last_opened", "selected_language"],
@@ -345,5 +344,4 @@ if __name__ == "__main__":
         run(manager.main())
     except KeyboardInterrupt:
         manager.shutdown()
-    finally:
-        manager.shutdown()
+    manager.shutdown()

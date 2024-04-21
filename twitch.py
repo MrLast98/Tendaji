@@ -10,8 +10,7 @@ from twitchio.ext.commands import Context
 
 from defaults import DEFAULT_COMMANDS
 from manager_utils import PrintColors
-
-from spotify import pause, add_song_id, play, query_for_song, get_track_by_id, skip, get_queue
+from spotify import pause, add_song_id, play, query_for_song, get_track_by_id, skip, get_queue, parse_song
 
 COMMANDS_FILE = 'config/commands.json'
 config = configparser.ConfigParser()
@@ -35,21 +34,11 @@ def print_queue_to_file(queue):
         f.write(json.dumps(queue))
 
 
-def parse_song(song):
-    artists = [a["name"] for a in song["artists"]]
-    return {
-        "name": song["name"],
-        "artists": ", ".join(artists),
-        "id": song["id"]
-    }
-
-
 class TwitchBot(commands.Bot):
     def __init__(self, manager):
         self.manager = manager
-        self.manager.print.print_to_logs(f"Connecting to {self.manager.configuration['twitch']['channel']}",
-                                         self.manager.print.GREEN)
         self.channel = self.manager.configuration['twitch']['channel']
+        self.manager.print.print_to_logs(f"Connecting to {self.channel}",self.manager.print.GREEN)
         self.queue = []
         self.token_flag = Event()
         self.complex_commands = {}
@@ -80,7 +69,7 @@ class TwitchBot(commands.Bot):
 
     def load_commands(self):
         if os.path.exists(COMMANDS_FILE):
-            with open(COMMANDS_FILE, "r") as f:
+            with open(COMMANDS_FILE, "r", encoding="utf-8") as f:
                 commands_json = json.load(f)
             self.load_simple_commands(commands_json=commands_json["simple"])
             self.set_complex_commands(commands_json=commands_json["complex"])
