@@ -21,6 +21,7 @@ async def join_channel(self, websocket):
     # Join the specified channel
     await websocket.send(f"JOIN #{self.channel}")
     load_commands(self)
+    self.manager.print.print_to_logs(f'Logged in as {self.channel} to {self.channel}', self.manager.print.GREEN)
 
 
 async def handle_irc_message(self, message):

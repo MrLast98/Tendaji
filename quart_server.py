@@ -4,11 +4,10 @@ import os
 from datetime import datetime
 from time import time
 
-from quart import Quart, request, redirect, session
+from quart import Quart, request, redirect
 from requests import post
 
 from spotify import get_token, get_current_track
-from twitch import print_queue_to_file
 
 # Configuration and Flask App
 CONFIG_FILE = 'config/config.json'
@@ -23,7 +22,7 @@ def update_queue(track_name, artist_name):
         queue = json.loads(f.read())
     while queue and queue[0]["title"] != track_name and queue[0]["author"] != artist_name and len(queue) > 0:
         queue.pop(0)
-    print_queue_to_file(queue)
+    # print_queue_to_file(queue)
 
 
 # def signal_handler(loop):
@@ -56,9 +55,7 @@ class QuartServer:
         access_token = response_json.get('access_token')
         refresh_token = response_json.get('refresh_token')
         expires_in = response_json.get('expires_in')
-        # Calculate the expiration timestamp and save it
-        expires_at = int(time()) + expires_in
-        return access_token, refresh_token, expires_at
+        return access_token, refresh_token, expires_in
 
     async def index(self):
         return redirect("/currently_playing")
@@ -68,7 +65,7 @@ class QuartServer:
         if token.get("access_token") is not None:
             self.manager.set_config('spotify-token', 'access_token', token['access_token'])
             self.manager.set_config('spotify-token', 'refresh_token', token.get('refresh_token'))
-            self.manager.set_config('spotify-token', 'expires_at', str(int(time()) + token['expires_in']))
+            self.manager.set_config('spotify-token', 'expires_in', str(token['expires_in']))
             self.manager.authentication_flag.clear()
             self.manager.save_config()
             return '''
@@ -95,13 +92,13 @@ class QuartServer:
                 '''
 
     async def callback_twitch(self):
-        access_token, refresh_token, expires_at = self.retrieve_token_info(request.args.get('code'))
+        access_token, refresh_token, expires_in = self.retrieve_token_info(request.args.get('code'))
 
         # Save the access token, refresh token, and expiration timestamp
-        if access_token and refresh_token and expires_at:
+        if access_token and refresh_token and expires_in:
             self.manager.set_config('twitch-token', 'access_token', access_token)
             self.manager.set_config('twitch-token', 'refresh_token', refresh_token)
-            self.manager.set_config('twitch-token', 'expires_at', str(expires_at))
+            self.manager.set_config('twitch-token', 'expires_in', str(expires_in))
             self.manager.save_config()
             self.manager.authentication_flag.clear()
             return '''
