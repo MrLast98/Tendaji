@@ -142,13 +142,13 @@ def load_commands(self):
         self.manager.print.print_to_logs('Commands file not found', self.manager.print.RED)
         self.manager.print.print_to_logs('Creating new one with default commands', self.manager.print.WHITE)
         defaults = DEFAULT_COMMANDS
-        for command, _ in FUNCTION_LIST:
+        for command in FUNCTION_LIST:
             defaults['complex'][command] = {}
             defaults['complex'][command]['enabled'] = True
             defaults['complex'][command]['level'] = 'ANY'
         with open('config/commands.json', 'w', encoding='utf-8') as f:
             f.write(json.dumps(defaults, indent=4))
-        self.load_commands()
+        load_commands(self)
 
 
 def load_simple_commands(self, commands_json):
