@@ -13,17 +13,17 @@ from twitch_commands import FUNCTION_LIST, send_message
 
 COMMANDS_FILE = 'config/commands.json'
 KEYWORD_PATTERN = r'\[([^\]]+)\]'
-SCOPE_TWITCH = "chat:read chat:edit"
+SCOPE_TWITCH = 'chat:read chat:edit'
 
 # Necessary Links for authorization
-TWITCH_AUTHORIZATION_URL = "https://id.twitch.tv/oauth2/authorize"
-TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token"
+TWITCH_AUTHORIZATION_URL = 'https://id.twitch.tv/oauth2/authorize'
+TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
 
 
 async def authenticate(self, websocket):
     # Send PASS and NICK commands to authenticate
     await websocket.send('CAP REQ :twitch.tv/membership twitch.tv/tags twitch.tv/commands')
-    await websocket.send(f"PASS oauth:{self.manager.configuration["twitch-token"]["access_token"]}")
+    await websocket.send(f"PASS oauth:{self.manager.configuration['twitch-token']['access_token']}")
     await websocket.send(f"NICK {self.channel}")
 
 
@@ -38,51 +38,53 @@ async def handle_irc_message(self, message):
     # Split the message into parts to identify the command
     message = parse_message(message)
     if message:
-        match message["command"]["command"]:
-            case "JOIN":
+        match message['command']['command']:
+            case 'JOIN':
                 # Handle JOIN message
                 pass
-            case "NICK":
+            case 'NICK':
                 # Handle NICK message
                 pass
-            case "NOTICE":
+            case 'NOTICE':
                 print(message)
-            case "PART":
+            case 'PART':
                 # Handle PART message
                 pass
-            case "PING":
-                await self.websocket.send("PONG")
-            case "PRIVMSG":
-                self.manager.print.print_to_logs(f"{message["tags"]["display-name"]}, {message["parameters"].strip("\r\n")}", self.manager.print.BLUE)
-                if message["command"].get("botCommand"):
+            case 'PING':
+                await self.websocket.send('PONG')
+            case 'PRIVMSG':
+                self.manager.print.print_to_logs(
+                    f"{message['tags']['display-name']}, {message['parameters'].strip('\r\n')}",
+                    self.manager.print.BLUE)
+                if message['command'].get('botCommand'):
                     await handle_commands(self, message)
                 # print(json.dumps(message, indent=4))
                 # Handle PRIVMSG message
-            case "CLEARCHAT":
+            case 'CLEARCHAT':
                 # Handle CLEARCHAT message
                 pass
-            case "CLEARMSG":
+            case 'CLEARMSG':
                 # Handle CLEARMSG message
                 pass
-            case "GLOBALUSERSTATE":
+            case 'GLOBALUSERSTATE':
                 # Handle GLOBALUSERSTATE message
                 pass
-            case "HOSTTARGET":
+            case 'HOSTTARGET':
                 # Handle HOSTTARGET message
                 pass
-            case "RECONNECT":
+            case 'RECONNECT':
                 # Handle RECONNECT message
                 pass
-            case "ROOMSTATE":
+            case 'ROOMSTATE':
                 # Handle ROOMSTATE message
                 pass
-            case "USERNOTICE":
+            case 'USERNOTICE':
                 # Handle USERNOTICE message
                 pass
-            case "USERSTATE":
+            case 'USERSTATE':
                 # Handle USERSTATE message
                 pass
-            case "WHISPER":
+            case 'WHISPER':
                 # Handle WHISPER message
                 pass
             case _:
@@ -92,77 +94,78 @@ async def handle_irc_message(self, message):
 
 
 async def handle_commands(self, message):
-    command = message["command"].get("botCommand")
+    command = message['command'].get('botCommand')
     if self.simple_commands.get(command):
-        if is_user_allowed(self, message["tags"], self.simple_commands[command]["level"]):
-            answer = self.simple_commands[command]["message"]
+        if is_user_allowed(self, message['tags'], self.simple_commands[command]['level']):
+            answer = self.simple_commands[command]['message']
             answer = replace_keywords(answer, message)
             await send_message(self, answer)
     elif self.complex_commands.get(command):
-        if is_user_allowed(self, message["tags"], self.complex_commands[command]["level"]):
+        if is_user_allowed(self, message['tags'], self.complex_commands[command]['level']):
             func = getattr(self.twitch_commands, command)
-            await func(message["command"].get("botCommandParams") if message["command"].get("botCommandParams") else None)
+            await func(
+                message['command'].get('botCommandParams') if message['command'].get('botCommandParams') else None)
     else:
         pass
 
 
 def is_user_allowed(self, author, level):
     match level:
-        case "BROADCASTER":
-            if author["broadcaster"]:
+        case 'BROADCASTER':
+            if author['broadcaster']:
                 return True
-        case "MOD":
-            if author["mod"] or author["broadcaster"]:
+        case 'MOD':
+            if author['mod'] or author['broadcaster']:
                 return True
-        case "VIP":
-            if author["vip"] or author["mod"] or author["broadcaster"]:
+        case 'VIP':
+            if author['vip'] or author['mod'] or author['broadcaster']:
                 return True
-        case "SUB":
-            if author["subscriber"] or author["vip"] or author["mod"] or author["broadcaster"]:
+        case 'SUB':
+            if author['subscriber'] or author['vip'] or author['mod'] or author['broadcaster']:
                 return True
         case _:
             return True
 
     # If none of the above cases match, it means the user is not allowed
-    self.manager.print.print_to_logs(f"User {author.display_name} not allowed to run this command",
+    self.manager.print.print_to_logs(f'User {author.display_name} not allowed to run this command',
                                      self.manager.print.YELLOW)
     return False
 
 
 def load_commands(self):
     if os.path.exists(COMMANDS_FILE):
-        with open(COMMANDS_FILE, "r", encoding="utf-8") as f:
+        with open(COMMANDS_FILE, 'r', encoding='utf-8') as f:
             commands_json = json.load(f)
-        load_simple_commands(self, commands_json=commands_json["simple"])
-        set_complex_commands(self, commands_json=commands_json["complex"])
+        load_simple_commands(self, commands_json=commands_json['simple'])
+        set_complex_commands(self, commands_json=commands_json['complex'])
     else:
-        self.manager.print.print_to_logs("Commands file not found", self.manager.print.RED)
-        self.manager.print.print_to_logs("Creating new one with default commands", self.manager.print.WHITE)
+        self.manager.print.print_to_logs('Commands file not found', self.manager.print.RED)
+        self.manager.print.print_to_logs('Creating new one with default commands', self.manager.print.WHITE)
         defaults = DEFAULT_COMMANDS
         for command, _ in FUNCTION_LIST:
-            defaults["complex"][command] = {}
-            defaults["complex"][command]["enabled"] = True
-            defaults["complex"][command]["level"] = "ANY"
-        with open("config/commands.json", "w", encoding="utf-8") as f:
+            defaults['complex'][command] = {}
+            defaults['complex'][command]['enabled'] = True
+            defaults['complex'][command]['level'] = 'ANY'
+        with open('config/commands.json', 'w', encoding='utf-8') as f:
             f.write(json.dumps(defaults, indent=4))
         self.load_commands()
 
 
 def load_simple_commands(self, commands_json):
     for command, context in commands_json.items():
-        if context["enabled"]:
-            del context["enabled"]
+        if context['enabled']:
+            del context['enabled']
             # Use the command decorator to register the command
             self.simple_commands[command] = context
-            self.manager.print.print_to_logs(f"Registered simple command {command}", self.manager.print.BRIGHT_PURPLE)
+            self.manager.print.print_to_logs(f'Registered simple command {command}', self.manager.print.BRIGHT_PURPLE)
 
 
 def set_complex_commands(self, commands_json):
     for command, context in commands_json.items():
-        if context["enabled"]:
-            del context["enabled"]
+        if context['enabled']:
+            del context['enabled']
             self.complex_commands[command] = context
-            self.manager.print.print_to_logs(f"Registered complex command {command}", self.manager.print.BRIGHT_PURPLE)
+            self.manager.print.print_to_logs(f'Registered complex command {command}', self.manager.print.BRIGHT_PURPLE)
 
 
 def replace_keywords(message: string, original_message):
@@ -170,18 +173,18 @@ def replace_keywords(message: string, original_message):
     if len(matches) > 0:
         for m in matches:
             match m:
-                case "sender":
-                    return re.sub(KEYWORD_PATTERN, f"@{original_message["tags"]["display-name"]}", message)
+                case 'sender':
+                    return re.sub(KEYWORD_PATTERN, f"@{original_message['tags']['display-name']}", message)
     else:
         return message
 
 
 def parse_message(message):
     parsed_message = {
-        "tags": None,
-        "source": None,
-        "command": None,
-        "parameters": None
+        'tags': None,
+        'source': None,
+        'command': None,
+        'parameters': None
     }
 
     idx = 0
@@ -211,19 +214,19 @@ def parse_message(message):
         idx = end_idx + 1
         raw_parameters_component = message[idx:]
 
-    parsed_message["command"] = parse_command(raw_command_component)
+    parsed_message['command'] = parse_command(raw_command_component)
 
-    if parsed_message["command"] is None:
+    if parsed_message['command'] is None:
         return None
     else:
         if raw_tags_component is not None:
-            parsed_message["tags"] = parse_tags(raw_tags_component)
+            parsed_message['tags'] = parse_tags(raw_tags_component)
 
-        parsed_message["source"] = parse_source(raw_source_component)
-        parsed_message["parameters"] = raw_parameters_component
+        parsed_message['source'] = parse_source(raw_source_component)
+        parsed_message['parameters'] = raw_parameters_component
 
         if raw_parameters_component and raw_parameters_component[0] == '!':
-            parsed_message["command"] = parse_parameters(raw_parameters_component, parsed_message["command"])
+            parsed_message['command'] = parse_parameters(raw_parameters_component, parsed_message['command'])
 
     return parsed_message
 
@@ -242,12 +245,12 @@ def parse_tags(tags):
         tag_value = get_tag_value(parsed_tag)
         if parsed_tag[0] in tags_to_ignore:
             continue
-        if parsed_tag[0] == "badges" and parsed_tag[1]:
-            parsed_tag_value = tag_value.split(",") if "," in tag_value else tag_value
-            dict_parsed_tags["broadcaster"] = "broadcaster/1" in parsed_tag_value
+        if parsed_tag[0] == 'badges' and parsed_tag[1]:
+            parsed_tag_value = tag_value.split(',') if ',' in tag_value else tag_value
+            dict_parsed_tags['broadcaster'] = 'broadcaster/1' in parsed_tag_value
         dict_parsed_tags[parsed_tag[0]] = tag_value
-    if not dict_parsed_tags.get("vip"):
-        dict_parsed_tags["vip"] = False
+    if not dict_parsed_tags.get('vip'):
+        dict_parsed_tags['vip'] = False
     return dict_parsed_tags
 
 
@@ -265,12 +268,12 @@ def parse_command(raw_command_component):
 
     if command_parts[0] in ['JOIN', 'PART', 'NOTICE', 'CLEARCHAT', 'HOSTTARGET', 'PRIVMSG']:
         parsed_command = {
-            "command": command_parts[0],
-            "channel": command_parts[1]
+            'command': command_parts[0],
+            'channel': command_parts[1]
         }
     elif command_parts[0] == 'PING':
         parsed_command = {
-            "command": command_parts[0]
+            'command': command_parts[0]
         }
     # Add other command cases as needed
 
@@ -283,8 +286,8 @@ def parse_source(raw_source_component):
     else:
         source_parts = raw_source_component.split('!')
         return {
-            "nick": source_parts[0] if len(source_parts) == 2 else None,
-            "host": source_parts[1] if len(source_parts) == 2 else source_parts[0]
+            'nick': source_parts[0] if len(source_parts) == 2 else None,
+            'host': source_parts[1] if len(source_parts) == 2 else source_parts[0]
         }
 
 
@@ -294,10 +297,10 @@ def parse_parameters(raw_parameters_component, command):
     params_idx = command_parts.find(' ')
 
     if params_idx == -1:
-        command["botCommand"] = command_parts
+        command['botCommand'] = command_parts
     else:
-        command["botCommand"] = command_parts[:params_idx]
-        command["botCommandParams"] = command_parts[params_idx:].strip()
+        command['botCommand'] = command_parts[:params_idx]
+        command['botCommandParams'] = command_parts[params_idx:].strip()
 
     return command
 
@@ -316,28 +319,28 @@ def retrieve_token_info(client_id, client_secret, code):
 
 def refresh_access_token(refresh_token, client_id, client_secret):
     payload = {
-        "grant_type": "refresh_token",
-        "refresh_token": refresh_token,
-        "client_id": client_id,
-        "client_secret": client_secret,
+        'grant_type': 'refresh_token',
+        'refresh_token': refresh_token,
+        'client_id': client_id,
+        'client_secret': client_secret,
     }
     response = requests.post(TWITCH_TOKEN_URL, data=payload, timeout=5)
     return response.json()
 
 
 async def refresh_twitch_token(self):
-    response = refresh_access_token(self.configuration["twitch-token"]["refresh_token"],
-                                    self.configuration["twitch"]["client_id"],
-                                    self.configuration["twitch"]["client_secret"])
-    if "access_token" in response:
-        access_token = response.get("access_token")
-        refresh_token = response.get("refresh_token")
-        expires_in = response.get("expires_in")
+    response = refresh_access_token(self.configuration['twitch-token']['refresh_token'],
+                                    self.configuration['twitch']['client_id'],
+                                    self.configuration['twitch']['client_secret'])
+    if 'access_token' in response:
+        access_token = response.get('access_token')
+        refresh_token = response.get('refresh_token')
+        expires_in = response.get('expires_in')
 
-        self.set_config("twitch-token", "access_token", access_token)
-        self.set_config("twitch-token", "refresh_token", refresh_token)
-        self.set_config("twitch-token", "expires_in", str(expires_in))
-        self.set_config("twitch-token", "timestamp", str(int(time())))
+        self.set_config('twitch-token', 'access_token', access_token)
+        self.set_config('twitch-token', 'refresh_token', refresh_token)
+        self.set_config('twitch-token', 'expires_in', str(expires_in))
+        self.set_config('twitch-token', 'timestamp', str(int(time())))
     else:
         self.print.print_to_logs(f"Failed to refresh Twitch token: {response.status}", self.print.YELLOW)
         self.print.print_to_logs(f"Response: {response}", self.print.WHITE)
@@ -345,12 +348,12 @@ async def refresh_twitch_token(self):
 
 
 async def start_twitch_oauth_flow(self):
-    self.print.print_to_logs("Re-Authorizing Twitch Bot...", self.print.YELLOW)
+    self.print.print_to_logs('Re-Authorizing Twitch Bot...', self.print.YELLOW)
     params = {
-        "client_id": self.configuration["twitch"]["client_id"],
-        "redirect_uri": "https://localhost:5000/callback_twitch",
-        "response_type": "code",
-        "scope": SCOPE_TWITCH
+        'client_id': self.configuration['twitch']['client_id'],
+        'redirect_uri': 'https://localhost:5000/callback_twitch',
+        'response_type': 'code',
+        'scope': SCOPE_TWITCH
     }
     url = f"{TWITCH_AUTHORIZATION_URL}?{urlencode(params)}"
     wbopen(url)

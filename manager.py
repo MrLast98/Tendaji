@@ -20,9 +20,9 @@ from twitch_utils import start_twitch_oauth_flow, refresh_twitch_token
 
 
 # Files Location
-# COMMANDS_FILE = "config/commands.json"
-QUEUE_FILE = "queue.json"
-CONFIG_FILE = "config/config.json"
+# COMMANDS_FILE = 'config/commands.json'
+QUEUE_FILE = 'queue.json'
+CONFIG_FILE = 'config/config.json'
 
 
 class Manager:
@@ -33,9 +33,9 @@ class Manager:
         self.delay = None
         self.server = None
         self.configuration = {
-            "app": {
-                "last_opened": None,
-                "selected_language": None
+            'app': {
+                'last_opened': None,
+                'selected_language": None
             },
             "twitch": {
                 "channel": None,

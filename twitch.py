@@ -1,17 +1,14 @@
 import ssl
 from asyncio import Event
 
-import ssl
-from asyncio import Event
-
 import websockets
 
 from manager_utils import PrintColors
 from twitch_commands import TwitchCommands
 from twitch_utils import handle_irc_message, authenticate, join_channel
 
-EVENTSUB_URL = "wss://eventsub.wss.twitch.tv/ws"
-CHAT_URL = "wss://irc-ws.chat.twitch.tv:443"
+EVENTSUB_URL = 'wss://eventsub.wss.twitch.tv/ws'
+CHAT_URL = 'wss://irc-ws.chat.twitch.tv:443'
 
 
 class TwitchWebSocketManager:
@@ -35,8 +32,8 @@ class TwitchWebSocketManager:
 
     async def chat_connection(self):
         ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-        ssl_context.load_cert_chain(certfile=self.manager.resource_path("localhost.ecc.crt"),
-                                    keyfile=self.manager.resource_path("localhost.ecc.key"))
+        ssl_context.load_cert_chain(certfile=self.manager.resource_path('localhost.ecc.crt'),
+                                    keyfile=self.manager.resource_path('localhost.ecc.key'))
 
         async with websockets.connect(CHAT_URL, ssl=ssl_context) as websocket:
             self.websocket = websocket
@@ -59,4 +56,4 @@ class TwitchWebSocketManager:
     async def close(self):
         if self.websocket:
             await self.websocket.close()
-        self.manager.print.print_to_logs("Twitch Bot Shut Down!", PrintColors.YELLOW)
+        self.manager.print.print_to_logs('Twitch Bot Shut Down!', PrintColors.YELLOW)

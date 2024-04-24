@@ -3,30 +3,30 @@ import os
 
 import defaults
 
-TRANSLATION_FOLDER = "translations"
+TRANSLATION_FOLDER = 'translations'
 
 
 def is_string_valid(string):
-    return string and string is not None and string != ""
+    return string and string is not None and string != ''
 
 
 class TranslationManager:
     def __init__(self, manager):
         self.manager = manager
         self.translations = {}
-        self.manager = self.manager.configuration.get("app", {})
-        self.default_language = "en"
-        if not os.path.exists("translations"):
-            os.mkdir("translations")
+        self.manager = self.manager.configuration.get('app', {})
+        self.default_language = 'en'
+        if not os.path.exists('translations'):
+            os.mkdir('translations')
         self.load_translations()
 
     def load_translations(self):
         file_list = os.listdir(TRANSLATION_FOLDER)
         if len(file_list) > 0:
             for filename in os.listdir(TRANSLATION_FOLDER):
-                if filename.endswith(".json"):
+                if filename.endswith('.json'):
                     language_code = os.path.splitext(filename)[0]
-                    with open(os.path.join(TRANSLATION_FOLDER, filename), "r", encoding="utf-8") as file:
+                    with open(os.path.join(TRANSLATION_FOLDER, filename), 'r', encoding="utf-8") as file:
                         self.translations[language_code] = json.load(file)
         else:
             self.translations["en"] = defaults.EN_DEFAULTS

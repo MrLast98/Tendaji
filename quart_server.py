@@ -14,13 +14,13 @@ CONFIG_FILE = 'config/config.json'
 COMMANDS_FILE = 'config/commands.json'
 QUEUE_FILE = 'queue.json'
 config = configparser.ConfigParser()
-TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token"
+TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
 
 
 def update_queue(track_name, artist_name):
-    with open("queue.json", "r", encoding="utf-8") as f:
+    with open('queue.json', 'r', encoding='utf-8') as f:
         queue = json.loads(f.read())
-    while queue and queue[0]["title"] != track_name and queue[0]["author"] != artist_name and len(queue) > 0:
+    while queue and queue[0]['title'] != track_name and queue[0]['author"] != artist_name and len(queue) > 0:
         queue.pop(0)
     # print_queue_to_file(queue)
 

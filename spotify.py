@@ -8,18 +8,18 @@ from webbrowser import open as wbopen
 
 import requests
 
-SPOTIFY_AUTHORIZATION_URL = "https://accounts.spotify.com/authorize"
-OAUTH_SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
-SCOPE_SPOTIFY = "user-read-playback-state user-modify-playback-state"
+SPOTIFY_AUTHORIZATION_URL = 'https://accounts.spotify.com/authorize'
+OAUTH_SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token'
+SCOPE_SPOTIFY = 'user-read-playback-state user-modify-playback-state'
 
 
 # Parse the song to retrieve the data for the songs
 def parse_song(song):
-    artists = [a["name"] for a in song["artists"]]
+    artists = [a['name'] for a in song['artists']]
     return {
-        "name": song["name"],
-        "artists": ", ".join(artists),
-        "id": song["id"]
+        'name': song['name'],
+        'artists': ', '.join(artists),
+        'id': song["id"]
     }
 
 
