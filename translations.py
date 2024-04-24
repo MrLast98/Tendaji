@@ -26,16 +26,16 @@ class TranslationManager:
             for filename in os.listdir(TRANSLATION_FOLDER):
                 if filename.endswith('.json'):
                     language_code = os.path.splitext(filename)[0]
-                    with open(os.path.join(TRANSLATION_FOLDER, filename), 'r', encoding="utf-8") as file:
+                    with open(os.path.join(TRANSLATION_FOLDER, filename), 'r', encoding='utf-8') as file:
                         self.translations[language_code] = json.load(file)
         else:
-            self.translations["en"] = defaults.EN_DEFAULTS
-            with open(os.path.join(TRANSLATION_FOLDER, "en.json"), "w", encoding="utf-8") as file:
-                file.write(json.dumps(self.translations["en"]))
+            self.translations['en'] = defaults.EN_DEFAULTS
+            with open(os.path.join(TRANSLATION_FOLDER, 'en.json'), 'w', encoding='utf-8') as file:
+                file.write(json.dumps(self.translations['en']))
 
     def get_language(self):
-        return self.manager.get("selected_languages") if is_string_valid(
-            self.manager.get("selected_languages")) else self.default_language
+        return self.manager.get('selected_languages') if is_string_valid(
+            self.manager.get('selected_languages')) else self.default_language
 
     def get_translation(self, key, language=None):
         language = language if is_string_valid(language) else self.get_language()
@@ -44,10 +44,10 @@ class TranslationManager:
 
     def get_dictionary(self, key, language=None):
         language = language if is_string_valid(language) else self.get_language()
-        dictionary = self.translations.get(language, {}).get("dictionary", {})
+        dictionary = self.translations.get(language, {}).get('dictionary', {})
         return dictionary.get(key, f"No dictionary item found for key '{key}' in language '{language}'")
 
     def get_errors(self, section, key, language=None):
         language = language if is_string_valid(language) else self.get_language()
-        errors = self.translations.get(language, {})["errors"][section]
+        errors = self.translations.get(language, {})['errors'][section]
         return errors.get(key, f"No dictionary item found for key '{key}' in language '{language}'")

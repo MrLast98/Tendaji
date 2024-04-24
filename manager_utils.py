@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 from time import time
 
-DEBUG = not os.path.exists("config/.debug")
+DEBUG = not os.path.exists('config/.debug')
 
 
 class PrintColors:
@@ -16,11 +16,11 @@ class PrintColors:
 
     def __init__(self):
         self.log_queue = []
-        if not os.path.exists("logs"):
-            os.mkdir("logs")
+        if not os.path.exists('logs'):
+            os.mkdir('logs')
 
     def print_to_logs(self, message, color):
-        current_date = datetime.now().strftime("%d-%m-%Y")
+        current_date = datetime.now().strftime('%d-%m-%Y')
         file_name = f"logs/logs-{current_date}.txt"
         # check_log_file()
         if not os.path.exists(file_name):
@@ -28,7 +28,7 @@ class PrintColors:
             #     self.log_queue.append((f"LOGS CREATED  - {file_name}", PrintColors.YELLOW))
             # self.log_queue.append((message, color))
             # return
-            with open(file_name, 'w', encoding="utf-8"):
+            with open(file_name, 'w', encoding='utf-8'):
                 pass
         if os.path.exists(file_name) and len(self.log_queue) > 0:
             for msg, msg_color in self.log_queue:
@@ -44,7 +44,7 @@ def new_print(message, color):
     log_entry = f"{timestamp} | {level}: {message}\n"
     # Format the log entry
     message = f"{timestamp} | {color}{level}{PrintColors.WHITE}: {color}{message}{PrintColors.WHITE}"
-    current_date = datetime.now().strftime("%d-%m-%Y")
+    current_date = datetime.now().strftime('%d-%m-%Y')
     file_name = f"logs/logs-{current_date}.txt"
     # if DEBUG:
     print(message)
@@ -56,50 +56,50 @@ def new_print(message, color):
 def get_level_from_color(color):
     match color:
         case PrintColors.RED:
-            return "ERROR"
+            return 'ERROR'
         case PrintColors.YELLOW:
-            return "WARNING"
+            return 'WARNING'
         case PrintColors.GREEN:
-            return "SUCCESS"
+            return 'SUCCESS'
         case PrintColors.BRIGHT_PURPLE:
-            return "INFO"
+            return 'INFO'
         case PrintColors.BLUE:
-            return "MSG"
+            return 'MSG'
         case PrintColors.WHITE:
-            return "SYS"
+            return 'SYS'
 
 
 def save_configuration_to_json(self, filename):
-    with open(filename, 'w', encoding="utf-8") as f:
+    with open(filename, 'w', encoding='utf-8') as f:
         json.dump(self.configuration, f, indent=4)
 
 
 def load_configuration_from_json(self, filename):
-    with open(filename, 'r', encoding="utf-8") as f:
+    with open(filename, 'r', encoding='utf-8') as f:
         self.configuration = json.load(f)
     # TODO: Remove this next version
-    if "spotify" in self.configuration and "client_secret" in self.configuration["spotify"]:
-        del self.configuration["spotify"]["client_secret"]
-    if "spotify-token" in self.configuration and "expires_at" in self.configuration["spotify-token"]:
-        del self.configuration["spotify-token"]["expires_at"]
-    if "twitch-token" in self.configuration and "expires_at" in self.configuration["twitch-token"]:
-        del self.configuration["twitch-token"]["expires_at"]
+    if 'spotify' in self.configuration and 'client_secret' in self.configuration['spotify']:
+        del self.configuration['spotify']['client_secret']
+    if 'spotify-token' in self.configuration and 'expires_at' in self.configuration['spotify-token']:
+        del self.configuration['spotify-token']['expires_at']
+    if 'twitch-token' in self.configuration and 'expires_at' in self.configuration['twitch-token']:
+        del self.configuration['twitch-token']['expires_at']
 
 
 def check_dict_structure(input_dict, sections):
     required_keys = {(section, item) for section, items in sections.items() for item in items}
     present_keys = {(section, item) for section, items in input_dict.items() for item in items if
-                    items[item] is not None and items[item] != ""}
+                    items[item] is not None and items[item] != ''}
     missing_keys = required_keys - present_keys
     return missing_keys
 
 
 def is_string_valid(string):
-    return string and string is not None and string != ""
+    return string and string is not None and string != ''
 
 
 def return_date_string():
-    return datetime.now().strftime("%d-%m-%Y")
+    return datetime.now().strftime('%d-%m-%Y')
 
 
 def check_token_expiry(expires_in, timestamp):
@@ -110,18 +110,18 @@ def check_token_expiry(expires_in, timestamp):
 
 
 def is_token_config_invalid(token):
-    return (not is_string_valid(token["access_token"])
-            or not is_string_valid(token["refresh_token"])
-            or not is_string_valid(token["expires_in"])
-            or not is_string_valid(token["timestamp"]))
+    return (not is_string_valid(token['access_token'])
+            or not is_string_valid(token['refresh_token'])
+            or not is_string_valid(token['expires_in'])
+            or not is_string_valid(token['timestamp']))
 
 
 def reset_token_config(self):
-    self.set_config("twitch-token", "expires_in", "")
-    self.set_config("twitch-token", "access_token", "")
-    self.set_config("twitch-token", "refresh_token", "")
-    self.set_config("twitch-token", "timestamp", "")
-    self.set_config("spotify-token", "access_token", "")
-    self.set_config("spotify-token", "refresh_token", "")
-    self.set_config("spotify-token", "expires_in", "")
-    self.set_config("spotify-token", "timestamp", "")
+    self.set_config('twitch-token', 'expires_in', '')
+    self.set_config('twitch-token', 'access_token', '')
+    self.set_config('twitch-token', 'refresh_token', '')
+    self.set_config('twitch-token', 'timestamp', '')
+    self.set_config('spotify-token', 'access_token', '')
+    self.set_config('spotify-token', 'refresh_token', '')
+    self.set_config('spotify-token', 'expires_in', '')
+    self.set_config('spotify-token', 'timestamp', '')

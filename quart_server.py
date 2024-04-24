@@ -20,7 +20,7 @@ TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
 def update_queue(track_name, artist_name):
     with open('queue.json', 'r', encoding='utf-8') as f:
         queue = json.loads(f.read())
-    while queue and queue[0]['title'] != track_name and queue[0]['author"] != artist_name and len(queue) > 0:
+    while queue and queue[0]['title'] != track_name and queue[0]['author'] != artist_name and len(queue) > 0:
         queue.pop(0)
     # print_queue_to_file(queue)
 
@@ -36,18 +36,18 @@ def update_queue(track_name, artist_name):
 class QuartServer:
     def __init__(self, manager):
         self.app = Quart(__name__)
-        self.app.add_url_rule("/", view_func=self.index)
-        self.app.add_url_rule("/callback", view_func=self.callback)
-        self.app.add_url_rule("/callback_twitch", view_func=self.callback_twitch)
-        self.app.add_url_rule("/currently_playing", view_func=self.currently_playing)
+        self.app.add_url_rule('/', view_func=self.index)
+        self.app.add_url_rule('/callback', view_func=self.callback)
+        self.app.add_url_rule('/callback_twitch', view_func=self.callback_twitch)
+        self.app.add_url_rule('/currently_playing', view_func=self.currently_playing)
         self.manager = manager
 
     async def index(self):
-        return redirect("/currently_playing")
+        return redirect('/currently_playing')
 
     async def callback(self):
-        response = get_token(self.manager.configuration["spotify"]["client_id"],
-                             self.manager.configuration["spotify"]["redirect_uri"],
+        response = get_token(self.manager.configuration['spotify']['client_id'],
+                             self.manager.configuration['spotify']['redirect_uri'],
                              request.args['code'],
                              self.manager.verify)
         access_token = response.get('access_token')
@@ -78,15 +78,15 @@ class QuartServer:
                     <title>Spotify Token not Retrieved</title>
                 </head>
                 <body>
-                    <p>ERROR: {response.get("error")}</p>
+                    <p>ERROR: {response.get('error')}</p>
                     <p>{response}</p>
                 </body>
                 </html>
                 '''
 
     async def callback_twitch(self):
-        response = retrieve_token_info(self.manager.configuration["twitch"]["client_id"],
-                                       self.manager.configuration["twitch"]["client_secret"],
+        response = retrieve_token_info(self.manager.configuration['twitch']['client_id'],
+                                       self.manager.configuration['twitch']['client_secret'],
                                        request.args.get('code'))
         access_token = response.get('access_token')
         refresh_token = response.get('refresh_token')
@@ -117,23 +117,23 @@ class QuartServer:
                     <title>Twitch Token not Retrieved</title>
                 </head>
                 <body>
-                    <p>ERROR: {response.get("error")}</p>
+                    <p>ERROR: {response.get('error')}</p>
                     <p>{response}</p>
                 </body>
                 </html>
             '''
 
     async def currently_playing(self):
-        track = get_current_track(self.manager.configuration["spotify-token"]["access_token"])
+        track = get_current_track(self.manager.configuration['spotify-token']['access_token'])
         if track is not None:
             track_name = track['item']['name']
             artist_name = track['item']['artists'][0]['name']
 
             album_name = track['item']['album']['name']
             album_image_url = track['item']['album']['images'][0]['url'] if track['item']['album'][
-                'images'] else "No image available"
-            track_duration = int(track['item']["duration_ms"])
-            progress = int(track["progress_ms"])
+                'images'] else 'No image available'
+            track_duration = int(track['item']['duration_ms'])
+            progress = int(track['progress_ms'])
             if track_duration - progress >= 30000:
                 refresh_rate = 30
             else:
@@ -166,4 +166,4 @@ class QuartServer:
             </html>
             '''
             return html_content
-        return "No track is currently playing."
+        return 'No track is currently playing.'
