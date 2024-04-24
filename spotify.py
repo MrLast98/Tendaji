@@ -2,7 +2,9 @@ import base64
 import hashlib
 import secrets
 import string
+from time import time
 from urllib.parse import quote
+from webbrowser import open as wbopen
 
 import requests
 
@@ -136,3 +138,28 @@ def refresh_access_token(client_id, refresh_token):
     }
     response = requests.post(OAUTH_SPOTIFY_TOKEN_URL, data=payload, timeout=5)
     return response.json()
+
+
+async def start_spotify_oauth_flow(self):
+    self.verify, challenge = generate_code_verifier_and_challenge()
+    auth_url = get_authorization_code(self.configuration["spotify"]["client_id"], self.configuration["spotify"]["redirect_uri"], challenge, self.quart.app.secret_key)
+    wbopen(auth_url)
+    self.authentication_flag.set()
+    await self.await_authentication()
+
+
+async def refresh_spotify_token(self):
+    response = refresh_access_token(self.configuration["spotify"]["client_id"], self.configuration["spotify-token"]["refresh_token"])
+    if "access_token" in response:
+        access_token = response.get("access_token")
+        refresh_token = response.get("refresh_token")
+        expires_in = response.get("expires_in")
+        self.set_config("spotify-token", "access_token", access_token)
+        self.set_config("spotify-token", "refresh_token", refresh_token)
+        self.set_config("spotify-token", "expires_in", str(expires_in))
+        self.set_config("spotify-token", "timestamp", str(int(time())))
+        self.save_config()
+    else:
+        self.print.print_to_logs(f"Failed to refresh Spotify token: {response.status}", self.print.YELLOW)
+        self.print.print_to_logs(f"Response: {response}", self.print.WHITE)
+        await start_spotify_oauth_flow(self)

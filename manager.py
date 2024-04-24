@@ -4,41 +4,30 @@ import sys
 from asyncio import create_task, run, CancelledError, sleep, gather, all_tasks, Event
 from datetime import timedelta
 from os import path, remove, mkdir
-from time import time
-from urllib.parse import urlencode
-from webbrowser import open as wbopen
 
 import uvicorn
-from aiohttp import ClientSession
+from websockets import ConnectionClosedOK
 
 from manager_utils import PrintColors, load_configuration_from_json, save_configuration_to_json, return_date_string, \
-    check_dict_structure, is_string_valid
+    check_dict_structure, is_string_valid, check_token_expiry, is_token_config_invalid, reset_token_config
 from quart_server import QuartServer
-from spotify import get_authorization_code, generate_code_verifier_and_challenge, refresh_access_token
+from spotify import start_spotify_oauth_flow, refresh_spotify_token
 from translations import TranslationManager
 from twitch import TwitchWebSocketManager
+from twitch_utils import start_twitch_oauth_flow, refresh_twitch_token
 
 # pyinstaller --onefile --add-data "localhost.ecc.crt;." --add-data "localhost.ecc.key;." manager.py
 
 
 # Files Location
-COMMANDS_FILE = "config/commands.json"
+# COMMANDS_FILE = "config/commands.json"
 QUEUE_FILE = "queue.json"
 CONFIG_FILE = "config/config.json"
-
-# Necessary Links for authorization
-TWITCH_AUTHORIZATION_URL = "https://id.twitch.tv/oauth2/authorize"
-TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token"
-
-# Scopes
-SCOPE_SPOTIFY = "user-read-playback-state user-modify-playback-state"
-SCOPE_TWITCH = "chat:read chat:edit"
 
 
 class Manager:
     def __init__(self):
         self.quart = None
-        self.updater = None
         self.bot = None
         self.verify = None
         self.delay = None
@@ -97,37 +86,28 @@ class Manager:
         self.setup()
         # self.save_config()
         self.print.print_to_logs("Configuration Loaded", self.print.GREEN)
-        # self.print.print_to_logs("Wanna reset the tokens?[Y/]", self.print.WHITE)
-        print("Do you want to reset the tokens? [Y/]")
+        self.print.print_to_logs("Do you want to reset the tokens? [Y/]", self.print.WHITE)
+        # print("Do you want to reset the tokens? [Y/]")
         i = input("> ")
         if "y" in i.lower():
             with open(CONFIG_FILE, 'r', encoding="utf-8") as f:
                 data = json.load(f)
 
             # Reset tokens to empty strings
-            self.set_config("twitch-token", "expires_in", "")
-            self.set_config("twitch-token", "access_token", "")
-            self.set_config("twitch-token", "refresh_token", "")
-            self.set_config("spotify-token", "access_token", "")
-            self.set_config("spotify-token", "refresh_token", "")
-            self.set_config("spotify-token", "expires_in", "")
+            reset_token_config(self)
             self.print.print_to_logs("Token for Spotify and Twitch correctly reset!", self.print.GREEN)
             # Write the updated data back to the file
             with open(CONFIG_FILE, 'w', encoding="utf-8") as f:
                 json.dump(data, f, indent=4)
 
         filename = f"logs/logs-{return_date_string()}.txt"
-        if not path.exists(filename) and "y" not in i.lower():
+        if not path.exists(filename):
             with open(filename, "w", encoding="utf-8") as f:
                 f.write(f"LOGS CREATION - {filename}\n")
-            self.print.print_to_logs("New Logs generated!", self.print.YELLOW)
-            self.set_config("twitch-token", "expires_in", "")
-            self.set_config("twitch-token", "access_token", "")
-            self.set_config("twitch-token", "refresh_token", "")
-            self.set_config("spotify-token", "access_token", "")
-            self.set_config("spotify-token", "refresh_token", "")
-            self.set_config("spotify-token", "expires_in", "")
-            self.save_config()
+            if "y" not in i.lower():
+                self.print.print_to_logs("New Logs generated!", self.print.YELLOW)
+                reset_token_config(self)
+                self.save_config()
 
         self.print.print_to_logs("Checking for queue existence...", self.print.BRIGHT_PURPLE)
         if path.exists(QUEUE_FILE):
@@ -139,8 +119,8 @@ class Manager:
             "app": ["last_opened", "selected_language"],
             "twitch": ["channel", "client_id", "client_secret"],
             "spotify": ["client_id", "redirect_uri"],
-            "twitch-token": ["access_token", "refresh_token", "expires_in"],
-            "spotify-token": ["access_token", "refresh_token", "expires_in"]
+            "twitch-token": ["access_token", "refresh_token", "expires_in", "timestamp"],
+            "spotify-token": ["access_token", "refresh_token", "expires_in", "timestamp"]
         }
 
         missing_keys = check_dict_structure(self.configuration, sections)
@@ -206,110 +186,47 @@ class Manager:
                 await self.tasks["bot"]
             except CancelledError:
                 pass
+            except ConnectionClosedOK:
+                pass
         self.bot = TwitchWebSocketManager(self)
         self.tasks["bot"] = create_task(self.bot.run())
 
-    async def update_twitch_token(self):
-        params = {
-            "grant_type": "refresh_token",
-            "refresh_token": self.configuration["twitch-token"]["refresh_token"],
-            "client_id": self.configuration["twitch"]["client_id"],
-            "client_secret": self.configuration["twitch"]["client_secret"],
-        }
-        async with ClientSession() as session:
-            async with session.request("POST", TWITCH_TOKEN_URL, data=params) as response:
-                response = await response.json()
-            if "access_token" in response:
-                access_token = response.get("access_token")
-                refresh_token = response.get("refresh_token")
-                expires_in = response.get("expires_in")
-
-                self.set_config("twitch-token", "access_token", access_token)
-                self.set_config("twitch-token", "refresh_token", refresh_token)
-                self.set_config("twitch-token", "expires_in", str(expires_in))
-            else:
-                raise Exception(f"Failed to refresh Twitch token: {response}")
-
-    async def start_spotify_oauth_flow(self):
-        self.verify, challenge = generate_code_verifier_and_challenge()
-        auth_url = get_authorization_code(self.configuration["spotify"]["client_id"], self.configuration["spotify"]["redirect_uri"], challenge, self.quart.app.secret_key)
-        wbopen(auth_url)
-        self.authentication_flag.set()
-        await self.await_authentication()
-
-    async def refresh_spotify_token(self):
-        response = refresh_access_token(self.configuration["spotify"]["client_id"], self.configuration["spotify-token"]["refresh_token"])
-        if response:
-            access_token = response.get("access_token")
-            refresh_token = response.get("refresh_token")
-            expires_in = response.get("expires_in")
-            self.set_config("spotify-token", "access_token", access_token)
-            self.set_config("spotify-token", "refresh_token", refresh_token)
-            self.set_config("spotify-token", "expires_in", str(expires_in))
-            self.save_config()
-        else:
-            self.print.print_to_logs(f"Failed to refresh Spotify token: {response.status}", self.print.YELLOW)
-            self.print.print_to_logs(f"Response: {response}", self.print.WHITE)
-            await self.start_spotify_oauth_flow()
-
-    async def start_twitch_oauth_flow(self):
-        self.print.print_to_logs("Re-Authorizing Twitch Bot...", self.print.YELLOW)
-        params = {
-            "client_id": self.configuration["twitch"]["client_id"],
-            "redirect_uri": "https://localhost:5000/callback_twitch",
-            "response_type": "code",
-            "scope": SCOPE_TWITCH
-        }
-        url = f"{TWITCH_AUTHORIZATION_URL}?{urlencode(params)}"
-        wbopen(url)
-        self.authentication_flag.set()
-        await self.await_authentication()
-
     async def check_spotify(self):
         self.print.print_to_logs("Spotify sanity check!", self.print.BRIGHT_PURPLE)
-        if (not is_string_valid(self.configuration["spotify-token"]["expires_in"]) or
-                not is_string_valid(self.configuration["spotify-token"]["refresh_token"]) or
-                not is_string_valid(self.configuration["spotify-token"]["access_token"])):
+        if is_token_config_invalid(self.configuration["spotify-token"]):
             self.print.print_to_logs("No Token", self.print.RED)
-            await self.start_spotify_oauth_flow()
+            await start_spotify_oauth_flow(self)
             self.save_config()
-        elif (is_string_valid(self.configuration["spotify-token"]["expires_in"]) and (
-                int(self.configuration["spotify-token"]["expires_in"]) < int(time())) or
-              abs(int(time()) - int(self.configuration["spotify-token"]["expires_in"])) <= 300):
+        elif check_token_expiry(self.configuration["spotify-token"]["expires_in"], self.configuration["spotify-token"]["timestamp"]):
             self.print.print_to_logs("Expired Spotify Token", self.print.YELLOW)
-            await self.refresh_spotify_token()
+            await refresh_spotify_token(self)
             self.save_config()
         else:
             self.print.print_to_logs("Spotify is OK!", self.print.GREEN)
         if is_string_valid(self.configuration["spotify-token"]["expires_in"]):
             expires_in = int(self.configuration["spotify-token"]["expires_in"])
-            spotify_delay = expires_in - 60  # Subtract 300 seconds for a buffer
+            spotify_delay = expires_in - 120  # Subtract 300 seconds for a buffer
             if spotify_delay <= 0:
                 spotify_delay = None  # If the token is already expired or about to expire, don't set a delay
             self.set_delay(spotify_delay)
 
     async def check_twitch(self):
         self.print.print_to_logs("Twitch sanity check!", self.print.BRIGHT_PURPLE)
-        if (not is_string_valid(self.configuration["twitch-token"]["access_token"]) or
-                not is_string_valid(self.configuration["twitch-token"]["refresh_token"]) or
-                not is_string_valid(self.configuration["twitch-token"]["expires_in"])):
+        if is_token_config_invalid(self.configuration["twitch-token"]):
             self.print.print_to_logs("Twitch token missing. Retrieving...", self.print.RED)
-            await self.start_twitch_oauth_flow()
+            await start_twitch_oauth_flow(self)
             self.save_config()
             await self.create_new_bot()
-        elif (is_string_valid(self.configuration["twitch-token"]["expires_in"]) and (
-                int(self.configuration["twitch-token"]["expires_in"]) < int(time())) or
-              abs(int(time()) - int(self.configuration["twitch-token"]["expires_in"])) <= 300):
+        elif check_token_expiry(self.configuration["twitch-token"]["expires_in"], self.configuration["twitch-token"]["timestamp"]):
             self.print.print_to_logs("Expired Twitch Token", self.print.YELLOW)
-            await self.update_twitch_token()
+            await refresh_twitch_token(self)
             self.save_config()
             await self.create_new_bot()
         else:
             self.print.print_to_logs("Twitch is OK!", self.print.GREEN)
-        twitch_delay = None
         if is_string_valid(self.configuration["twitch-token"]["expires_in"]):
             expires_in = int(self.configuration["twitch-token"]["expires_in"])
-            twitch_delay = expires_in - 60  # Subtract 300 seconds for a buffer
+            twitch_delay = expires_in - 120  # Subtract 300 seconds for a buffer
             if twitch_delay <= 0:
                 twitch_delay = None
             self.set_delay(twitch_delay)
@@ -321,10 +238,10 @@ class Manager:
 
     async def check_tokens(self):
         self.delay = None
-        # Twitch check
-        await self.check_twitch()
         # Spotify check
         await self.check_spotify()
+        # Twitch check
+        await self.check_twitch()
 
     async def shutdown(self):
         if self.shutdown_flag.is_set():
@@ -349,6 +266,7 @@ class Manager:
 
     async def main(self):
         self.tasks["quart"] = create_task(self.create_server())
+        await sleep(0.5)
         await self.check_tokens()
         if self.bot is None and self.tasks["bot"] is None:
             await self.create_new_bot()

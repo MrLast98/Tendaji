@@ -5,9 +5,9 @@ from datetime import datetime
 from time import time
 
 from quart import Quart, request, redirect
-from requests import post
 
 from spotify import get_token, get_current_track
+from twitch_utils import retrieve_token_info
 
 # Configuration and Flask App
 CONFIG_FILE = 'config/config.json'
@@ -42,32 +42,24 @@ class QuartServer:
         self.app.add_url_rule("/currently_playing", view_func=self.currently_playing)
         self.manager = manager
 
-    def retrieve_token_info(self, code):
-        payload = {
-            'client_id': self.manager.configuration['twitch']['client_id'],
-            'client_secret': self.manager.configuration['twitch']['client_secret'],
-            'code': code,
-            'grant_type': 'authorization_code',
-            'redirect_uri': 'https://localhost:5000/callback_twitch'
-        }
-        response = post(TWITCH_TOKEN_URL, data=payload)
-        response_json = response.json()
-        access_token = response_json.get('access_token')
-        refresh_token = response_json.get('refresh_token')
-        expires_in = response_json.get('expires_in')
-        return access_token, refresh_token, expires_in
-
     async def index(self):
         return redirect("/currently_playing")
 
     async def callback(self):
-        token = get_token(self.manager.configuration["spotify"]["client_id"], self.manager.configuration["spotify"]["redirect_uri"], request.args['code'], self.manager.verify)
-        if token.get("access_token") is not None:
-            self.manager.set_config('spotify-token', 'access_token', token['access_token'])
-            self.manager.set_config('spotify-token', 'refresh_token', token.get('refresh_token'))
-            self.manager.set_config('spotify-token', 'expires_in', str(token['expires_in']))
-            self.manager.authentication_flag.clear()
+        response = get_token(self.manager.configuration["spotify"]["client_id"],
+                             self.manager.configuration["spotify"]["redirect_uri"],
+                             request.args['code'],
+                             self.manager.verify)
+        access_token = response.get('access_token')
+        refresh_token = response.get('refresh_token')
+        expires_in = response.get('expires_in')
+        if access_token and refresh_token and expires_in:
+            self.manager.set_config('spotify-token', 'access_token', access_token)
+            self.manager.set_config('spotify-token', 'refresh_token', refresh_token)
+            self.manager.set_config('spotify-token', 'expires_in', str(expires_in))
+            self.manager.set_config('spotify-token', 'timestamp', str(int(time())))
             self.manager.save_config()
+            self.manager.authentication_flag.clear()
             return '''
                 <!DOCTYPE html>
                 <html>
@@ -86,19 +78,25 @@ class QuartServer:
                     <title>Spotify Token not Retrieved</title>
                 </head>
                 <body>
-                    <p>{token["error"]}: {token["error_description"]}</p>
+                    <p>ERROR: {response.get("error")}</p>
+                    <p>{response}</p>
                 </body>
                 </html>
                 '''
 
     async def callback_twitch(self):
-        access_token, refresh_token, expires_in = self.retrieve_token_info(request.args.get('code'))
-
+        response = retrieve_token_info(self.manager.configuration["twitch"]["client_id"],
+                                       self.manager.configuration["twitch"]["client_secret"],
+                                       request.args.get('code'))
+        access_token = response.get('access_token')
+        refresh_token = response.get('refresh_token')
+        expires_in = response.get('expires_in')
         # Save the access token, refresh token, and expiration timestamp
         if access_token and refresh_token and expires_in:
             self.manager.set_config('twitch-token', 'access_token', access_token)
             self.manager.set_config('twitch-token', 'refresh_token', refresh_token)
             self.manager.set_config('twitch-token', 'expires_in', str(expires_in))
+            self.manager.set_config('twitch-token', 'timestamp', str(int(time())))
             self.manager.save_config()
             self.manager.authentication_flag.clear()
             return '''
@@ -112,14 +110,15 @@ class QuartServer:
                 </body>
                 </html>
             '''
-        return '''
+        return f'''
                 <!DOCTYPE html>
                 <html>
                 <head>
-                    <title>Error Occurred</title>
+                    <title>Twitch Token not Retrieved</title>
                 </head>
                 <body>
-                    <p>Error: "Error retrieving tokens"</p>
+                    <p>ERROR: {response.get("error")}</p>
+                    <p>{response}</p>
                 </body>
                 </html>
             '''

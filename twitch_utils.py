@@ -2,12 +2,22 @@ import json
 import os
 import re
 import string
+from time import time
+from urllib.parse import urlencode
+from webbrowser import open as wbopen
+
+import requests
 
 from defaults import DEFAULT_COMMANDS
 from twitch_commands import FUNCTION_LIST, send_message
 
 COMMANDS_FILE = 'config/commands.json'
 KEYWORD_PATTERN = r'\[([^\]]+)\]'
+SCOPE_TWITCH = "chat:read chat:edit"
+
+# Necessary Links for authorization
+TWITCH_AUTHORIZATION_URL = "https://id.twitch.tv/oauth2/authorize"
+TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token"
 
 
 async def authenticate(self, websocket):
@@ -21,7 +31,7 @@ async def join_channel(self, websocket):
     # Join the specified channel
     await websocket.send(f"JOIN #{self.channel}")
     load_commands(self)
-    self.manager.print.print_to_logs(f'Logged in as {self.channel} to {self.channel}', self.manager.print.GREEN)
+    self.manager.print.print_to_logs(f'Logged in to the chat of {self.channel}', self.manager.print.GREEN)
 
 
 async def handle_irc_message(self, message):
@@ -232,7 +242,7 @@ def parse_tags(tags):
         tag_value = get_tag_value(parsed_tag)
         if parsed_tag[0] in tags_to_ignore:
             continue
-        if parsed_tag[0] == "badges":
+        if parsed_tag[0] == "badges" and parsed_tag[1]:
             parsed_tag_value = tag_value.split(",") if "," in tag_value else tag_value
             dict_parsed_tags["broadcaster"] = "broadcaster/1" in parsed_tag_value
         dict_parsed_tags[parsed_tag[0]] = tag_value
@@ -290,3 +300,59 @@ def parse_parameters(raw_parameters_component, command):
         command["botCommandParams"] = command_parts[params_idx:].strip()
 
     return command
+
+
+def retrieve_token_info(client_id, client_secret, code):
+    payload = {
+        'client_id': client_id,
+        'client_secret': client_secret,
+        'code': code,
+        'grant_type': 'authorization_code',
+        'redirect_uri': 'https://localhost:5000/callback_twitch'
+    }
+    response = requests.post(TWITCH_TOKEN_URL, data=payload, timeout=5)
+    return response.json()
+
+
+def refresh_access_token(refresh_token, client_id, client_secret):
+    payload = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": client_id,
+        "client_secret": client_secret,
+    }
+    response = requests.post(TWITCH_TOKEN_URL, data=payload, timeout=5)
+    return response.json()
+
+
+async def refresh_twitch_token(self):
+    response = refresh_access_token(self.configuration["twitch-token"]["refresh_token"],
+                                    self.configuration["twitch"]["client_id"],
+                                    self.configuration["twitch"]["client_secret"])
+    if "access_token" in response:
+        access_token = response.get("access_token")
+        refresh_token = response.get("refresh_token")
+        expires_in = response.get("expires_in")
+
+        self.set_config("twitch-token", "access_token", access_token)
+        self.set_config("twitch-token", "refresh_token", refresh_token)
+        self.set_config("twitch-token", "expires_in", str(expires_in))
+        self.set_config("twitch-token", "timestamp", str(int(time())))
+    else:
+        self.print.print_to_logs(f"Failed to refresh Twitch token: {response.status}", self.print.YELLOW)
+        self.print.print_to_logs(f"Response: {response}", self.print.WHITE)
+        await start_twitch_oauth_flow(self)
+
+
+async def start_twitch_oauth_flow(self):
+    self.print.print_to_logs("Re-Authorizing Twitch Bot...", self.print.YELLOW)
+    params = {
+        "client_id": self.configuration["twitch"]["client_id"],
+        "redirect_uri": "https://localhost:5000/callback_twitch",
+        "response_type": "code",
+        "scope": SCOPE_TWITCH
+    }
+    url = f"{TWITCH_AUTHORIZATION_URL}?{urlencode(params)}"
+    wbopen(url)
+    self.authentication_flag.set()
+    await self.await_authentication()

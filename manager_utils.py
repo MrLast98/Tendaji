@@ -1,6 +1,7 @@
 import json
 import os
 from datetime import datetime
+from time import time
 
 DEBUG = not os.path.exists("config/.debug")
 
@@ -79,6 +80,10 @@ def load_configuration_from_json(self, filename):
     # TODO: Remove this next version
     if "spotify" in self.configuration and "client_secret" in self.configuration["spotify"]:
         del self.configuration["spotify"]["client_secret"]
+    if "spotify-token" in self.configuration and "expires_at" in self.configuration["spotify-token"]:
+        del self.configuration["spotify-token"]["expires_at"]
+    if "twitch-token" in self.configuration and "expires_at" in self.configuration["twitch-token"]:
+        del self.configuration["twitch-token"]["expires_at"]
 
 
 def check_dict_structure(input_dict, sections):
@@ -95,3 +100,28 @@ def is_string_valid(string):
 
 def return_date_string():
     return datetime.now().strftime("%d-%m-%Y")
+
+
+def check_token_expiry(expires_in, timestamp):
+    if is_string_valid(expires_in):
+        expires_at = int(expires_in) + int(timestamp)
+        return (expires_at < int(time())) or abs(int(time()) - expires_at) <= 120
+    return True
+
+
+def is_token_config_invalid(token):
+    return (not is_string_valid(token["access_token"])
+            or not is_string_valid(token["refresh_token"])
+            or not is_string_valid(token["expires_in"])
+            or not is_string_valid(token["timestamp"]))
+
+
+def reset_token_config(self):
+    self.set_config("twitch-token", "expires_in", "")
+    self.set_config("twitch-token", "access_token", "")
+    self.set_config("twitch-token", "refresh_token", "")
+    self.set_config("twitch-token", "timestamp", "")
+    self.set_config("spotify-token", "access_token", "")
+    self.set_config("spotify-token", "refresh_token", "")
+    self.set_config("spotify-token", "expires_in", "")
+    self.set_config("spotify-token", "timestamp", "")
