@@ -94,8 +94,8 @@ def skip(token):
 # Get currently playing track
 def get_current_track(token):
     headers = {'Authorization': f'Bearer {token}'}
-    response = requests.post('https://api.spotify.com/v1/me/player/currently-playing', headers=headers, timeout=5)
-    return response.status_code
+    response = requests.get('https://api.spotify.com/v1/me/player/currently-playing', headers=headers, timeout=5)
+    return response.json()
 
 
 # Generate Code Verifier and Code Challenge

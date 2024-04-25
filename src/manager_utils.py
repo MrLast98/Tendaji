@@ -129,7 +129,7 @@ def reset_token_config(self):
     self.set_config('spotify-token', 'timestamp', '')
 
 
-def process_form(self, form_data):
+def process_form(form_data):
     commands = {}
     # Parse form data and update commands dictionary
     for key, value in form_data.items():

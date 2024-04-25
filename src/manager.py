@@ -17,7 +17,7 @@ from translations import TranslationManager
 from twitch import TwitchWebSocketManager
 from twitch_utils import start_twitch_oauth_flow, refresh_twitch_token
 
-# pyinstaller --onefile --add-data "localhost.ecc.crt;." --add-data "localhost.ecc.key;." manager.py
+# pyinstaller --name 'tendaji' --icon 'favicon.ico' --onefile --add-data "localhost.ecc.crt;." --add-data "localhost.ecc.key;." manager.py
 
 
 # Files Location

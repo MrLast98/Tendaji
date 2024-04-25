@@ -1,18 +1,16 @@
 import configparser
 import json
 import os
-from datetime import datetime
 from time import time
 
-from quart import Quart, request, render_template, Response, redirect
+from quart import Quart, request, render_template, Response, redirect, send_from_directory
 
 from manager_utils import is_string_valid, process_form
 from spotify import get_token, get_current_track
-from twitch_utils import retrieve_token_info
+from twitch_utils import retrieve_token_info, COMMANDS_FILE
 
 # Configuration and Flask App
 CONFIG_FILE = 'config/config.json'
-COMMANDS_FILE = 'config/commands.json'
 QUEUE_FILE = 'queue.json'
 config = configparser.ConfigParser()
 TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
@@ -45,13 +43,16 @@ class QuartServer:
         self.app.add_url_rule('/save', view_func=self.save_commands, methods=['POST'])
         self.app.add_url_rule('/reset', methods=['POST'], view_func=self.reset_config)
         self.app.add_url_rule('/commands', view_func=self.commands_config)
+        self.app.add_url_rule('/favicon.ico', view_func=self.favicon)
         self.manager = manager
-        with open(COMMANDS_FILE, 'r', encoding='utf-8') as f:
-            self.commands = json.loads(f.read())
+        self.commands = None
 
     @staticmethod
     async def index():
         return await render_template('index.html')
+
+    async def favicon(self):
+        return await send_from_directory(os.path.join(self.app.root_path), 'static/favicon.ico')
 
     def event_stream(self):
         while not self.manager.shutdown_flag.is_set():
@@ -69,7 +70,7 @@ class QuartServer:
 
     async def save_commands(self):
         form_data = await request.form
-        process_form(self.manager, form_data)
+        process_form(form_data)
         await self.manager.create_new_bot()
         return redirect('/commands')
 
@@ -172,7 +173,6 @@ class QuartServer:
                 refresh_rate = ((track_duration - progress) / 1000) + 2  # Convert to seconds and adds 2 seconds
                 if os.path.exists(QUEUE_FILE):
                     update_queue(track_name, artist_name)
-            next_refresh = int(time()) + refresh_rate
             html_content = f'''
             <!DOCTYPE html>
             <html>
@@ -190,7 +190,6 @@ class QuartServer:
                     <p><strong>Track:</strong> {track_name}</p>
                     <p><strong>Artist:</strong> {artist_name}</p>
                     <p><strong>Album:</strong> {album_name}</p>
-                    <p><strong>Next Refresh:</strong> {datetime.fromtimestamp(next_refresh).strftime('%H:%M:%S')}</p>
                     <img src="{album_image_url}" alt="Album art" class="album-art" />
                 </div>
             </body>
