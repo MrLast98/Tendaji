@@ -117,8 +117,6 @@ async def handle_commands(self, message):
             func = getattr(self.twitch_commands, command)
             await func(
                 message['command'].get('botCommandParams') if message['command'].get('botCommandParams') else None)
-    else:
-        pass
 
 
 def is_user_allowed(self, author, level):
