@@ -3,6 +3,8 @@ import os
 from datetime import datetime
 from time import time
 
+from twitch_utils import COMMANDS_FILE
+
 DEBUG = not os.path.exists('config/.debug')
 
 
@@ -125,3 +127,35 @@ def reset_token_config(self):
     self.set_config('spotify-token', 'refresh_token', '')
     self.set_config('spotify-token', 'expires_in', '')
     self.set_config('spotify-token', 'timestamp', '')
+
+
+def process_form(self, form_data):
+    commands = {}
+    # Parse form data and update commands dictionary
+    for key, value in form_data.items():
+        section, command_name, attribute = key.split('_')
+        if section not in commands:
+            commands[section] = {}
+
+        # Initialize the second level of nesting
+        if command_name not in commands[section]:
+            commands[section][command_name] = {}
+        commands[section][command_name][attribute] = value
+    for command_name, command_data in commands["simple"].items():
+        # Check if the "enabled" key exists
+        if "enabled" not in command_data:
+            # If it doesn't exist, add it with the value "False"
+            commands["simple"][command_name]["enabled"] = False
+        else:
+            commands["simple"][command_name]["enabled"] = True
+    # Iterate over the "complex" section
+    for command_name, command_data in commands["complex"].items():
+        # Check if the "enabled" key exists
+        if "enabled" not in command_data:
+            # If it doesn't exist, add it with the value "False"
+            commands["complex"][command_name]["enabled"] = False
+        else:
+            commands["complex"][command_name]["enabled"] = True
+    print(json.dumps(commands, indent=4))
+    with open(COMMANDS_FILE, 'w', encoding='utf-8') as f:
+        f.write(json.dumps(commands, indent=4))

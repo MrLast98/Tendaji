@@ -4,9 +4,9 @@ import os
 from datetime import datetime
 from time import time
 
-from quart import Quart, request, render_template, Response
+from quart import Quart, request, render_template, Response, redirect
 
-from manager_utils import is_string_valid
+from manager_utils import is_string_valid, process_form
 from spotify import get_token, get_current_track
 from twitch_utils import retrieve_token_info
 
@@ -41,10 +41,16 @@ class QuartServer:
         self.app.add_url_rule('/callback', view_func=self.callback)
         self.app.add_url_rule('/callback_twitch', view_func=self.callback_twitch)
         self.app.add_url_rule('/currently_playing', view_func=self.currently_playing)
-        self.app.add_url_rule("/stream", view_func=self.stream)
+        self.app.add_url_rule('/stream', view_func=self.stream)
+        self.app.add_url_rule('/save', view_func=self.save_commands, methods=['POST'])
+        self.app.add_url_rule('/reset', methods=['POST'], view_func=self.reset_config)
+        self.app.add_url_rule('/commands', view_func=self.commands_config)
         self.manager = manager
+        with open(COMMANDS_FILE, 'r', encoding='utf-8') as f:
+            self.commands = json.loads(f.read())
 
-    async def index(self):
+    @staticmethod
+    async def index():
         return await render_template('index.html')
 
     def event_stream(self):
@@ -54,7 +60,22 @@ class QuartServer:
                 yield f"data: {message}\n\n"
 
     async def stream(self):
-        return Response(self.event_stream(), mimetype="text/event-stream")
+        return Response(self.event_stream(), mimetype='text/event-stream')
+
+    async def commands_config(self):
+        with open(COMMANDS_FILE, 'r', encoding='utf-8') as f:
+            self.commands = json.loads(f.read())
+        return await render_template('config.html', commands=self.commands)
+
+    async def save_commands(self):
+        form_data = await request.form
+        process_form(self.manager, form_data)
+        await self.manager.create_new_bot()
+        return redirect('/commands')
+
+    @staticmethod
+    def reset_config():
+        return redirect('/commands')
 
     async def callback(self):
         response = get_token(self.manager.configuration['spotify']['client_id'],
@@ -136,7 +157,7 @@ class QuartServer:
 
     async def currently_playing(self):
         track = get_current_track(self.manager.configuration['spotify-token']['access_token'])
-        if track is not None:
+        if track:
             track_name = track['item']['name']
             artist_name = track['item']['artists'][0]['name']
 

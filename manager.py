@@ -1,7 +1,7 @@
 import json
 import secrets
 import sys
-from asyncio import create_task, run, CancelledError, sleep, gather, all_tasks, Event
+from asyncio import create_task, run, CancelledError, sleep, gather, Event
 from datetime import timedelta
 from os import path, remove, mkdir
 from queue import Queue
@@ -253,20 +253,17 @@ class Manager:
         self.shutdown_flag.set()
         self.print.print_to_logs('Initiating shutdown...', self.print.BRIGHT_PURPLE)
         await self.bot.close()
-        await self.server.shutdown()
-        # Cancel all tasks
-        for task in all_tasks():
-            task.cancel()
-        # Await all tasks to ensure they complete their cleanup
-        await gather(*all_tasks(), return_exceptions=True)
-        # Perform any additional cleanup here
+        self.tasks['updater'].cancel()
         self.save_config()
         self.print.print_to_logs('Cleanup complete. Exiting...', self.print.BRIGHT_PURPLE)
 
     async def core_loop(self):
-        while not self.shutdown_flag.is_set():
-            await sleep(self.delay if self.delay is not None else 300)
-            await self.check_tokens()
+        try:
+            while not self.shutdown_flag.is_set():
+                await sleep(self.delay if self.delay is not None else 300)
+                await self.check_tokens()
+        except CancelledError:
+            pass
 
     async def main(self):
         self.tasks['quart'] = create_task(self.create_server())
@@ -276,11 +273,10 @@ class Manager:
             await self.create_new_bot()
         self.tasks['updater'] = create_task(self.core_loop())
         tasks = [self.tasks['quart'], self.tasks['updater'], self.tasks['bot']]
-        await gather(*tasks)
-
-        # except Exception as e:
-        #     self.print.print_to_logs(e, PrintColors.RED)
-        #     await self.shutdown()
+        try:
+            await gather(*tasks)
+        except CancelledError:
+            await self.shutdown()
 
 
 if __name__ == '__main__':
@@ -288,5 +284,4 @@ if __name__ == '__main__':
     try:
         run(manager.main())
     except KeyboardInterrupt:
-        run(manager.shutdown())
-    run(manager.shutdown())
+        pass

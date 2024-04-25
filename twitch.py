@@ -2,6 +2,7 @@ import ssl
 from asyncio import Event
 
 import websockets
+from websockets import ConnectionClosedOK
 
 from manager_utils import PrintColors
 from twitch_commands import TwitchCommands
@@ -38,11 +39,13 @@ class TwitchWebSocketManager:
             self.websocket = websocket
             await authenticate(self, self.websocket)
             await join_channel(self, self.websocket)
-
-            while not self.shutdown.is_set():
-                message = await self.websocket.recv()
-                # print(f"Chat Message: {message}")
-                await handle_irc_message(self, message)
+            try:
+                while not self.shutdown.is_set():
+                    message = await self.websocket.recv()
+                    # print(f"Chat Message: {message}")
+                    await handle_irc_message(self, message)
+            except ConnectionClosedOK:
+                pass
 
     async def run(self):
         # Run both connections in parallel
