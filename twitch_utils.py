@@ -34,6 +34,16 @@ async def join_channel(self, websocket):
     self.manager.print.print_to_logs(f'Logged in to the chat of {self.channel}', self.manager.print.GREEN)
 
 
+def format_message(message):
+    sub = '[SUB]' if message['tags']['subscriber'] else ''
+    vip = '[VIP]' if message['tags']['vip'] else ''
+    mod = '[MOD]' if message['tags']['mod'] else ''
+    broadcaster = '[BROADCASTER]' if message['tags']['broadcaster'] else ''
+    tags = f"{broadcaster}{mod}{vip}{sub}"
+    author = f"{tags}{message['tags']['display-name']}"
+    return f"{author}: {message['parameters'].strip('\r\n')}"
+
+
 async def handle_irc_message(self, message):
     # Split the message into parts to identify the command
     message = parse_message(message)
@@ -56,6 +66,8 @@ async def handle_irc_message(self, message):
                 self.manager.print.print_to_logs(
                     f"{message['tags']['display-name']}, {message['parameters'].strip('\r\n')}",
                     self.manager.print.BLUE)
+                display_message = format_message(message)
+                self.manager.queue.put(display_message)
                 if message['command'].get('botCommand'):
                     await handle_commands(self, message)
                 # print(json.dumps(message, indent=4))

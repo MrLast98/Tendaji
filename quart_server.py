@@ -4,8 +4,9 @@ import os
 from datetime import datetime
 from time import time
 
-from quart import Quart, request, redirect
+from quart import Quart, request, render_template, Response
 
+from manager_utils import is_string_valid
 from spotify import get_token, get_current_track
 from twitch_utils import retrieve_token_info
 
@@ -40,10 +41,20 @@ class QuartServer:
         self.app.add_url_rule('/callback', view_func=self.callback)
         self.app.add_url_rule('/callback_twitch', view_func=self.callback_twitch)
         self.app.add_url_rule('/currently_playing', view_func=self.currently_playing)
+        self.app.add_url_rule("/stream", view_func=self.stream)
         self.manager = manager
 
     async def index(self):
-        return redirect('/currently_playing')
+        return await render_template('index.html')
+
+    def event_stream(self):
+        while not self.manager.shutdown_flag.is_set():
+            message = self.manager.queue.get(block=True)
+            if is_string_valid(message):
+                yield f"data: {message}\n\n"
+
+    async def stream(self):
+        return Response(self.event_stream(), mimetype="text/event-stream")
 
     async def callback(self):
         response = get_token(self.manager.configuration['spotify']['client_id'],
@@ -137,7 +148,7 @@ class QuartServer:
             if track_duration - progress >= 30000:
                 refresh_rate = 30
             else:
-                refresh_rate = (track_duration - progress) / 1000 + 1  # Convert to seconds and add 1
+                refresh_rate = ((track_duration - progress) / 1000) + 2  # Convert to seconds and adds 2 seconds
                 if os.path.exists(QUEUE_FILE):
                     update_queue(track_name, artist_name)
             next_refresh = int(time()) + refresh_rate
@@ -153,7 +164,6 @@ class QuartServer:
                 </style>
             </head>
             <body>
-                <div>
                 <div>
                     <h1>Currently Playing</h1>
                     <p><strong>Track:</strong> {track_name}</p>

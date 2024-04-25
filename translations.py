@@ -2,12 +2,9 @@ import json
 import os
 
 import defaults
+from manager_utils import is_string_valid
 
 TRANSLATION_FOLDER = 'translations'
-
-
-def is_string_valid(string):
-    return string and string is not None and string != ''
 
 
 class TranslationManager:

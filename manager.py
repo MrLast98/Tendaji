@@ -4,6 +4,7 @@ import sys
 from asyncio import create_task, run, CancelledError, sleep, gather, all_tasks, Event
 from datetime import timedelta
 from os import path, remove, mkdir
+from queue import Queue
 
 import uvicorn
 from websockets import ConnectionClosedOK
@@ -32,6 +33,7 @@ class Manager:
         self.verify = None
         self.delay = None
         self.server = None
+        self.queue = Queue()
         self.configuration = {
             'app': {
                 'last_opened': None,

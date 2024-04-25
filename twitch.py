@@ -16,7 +16,6 @@ class TwitchWebSocketManager:
         self.manager = manager
         self.channel = self.manager.configuration['twitch']['channel']
         self.manager.print.print_to_logs(f"Connecting to {self.channel}", self.manager.print.GREEN)
-        self.queue = []
         self.complex_commands = {}
         self.simple_commands = {}
         self.websocket = None
