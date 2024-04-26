@@ -3,6 +3,8 @@ import os
 from datetime import datetime
 from time import time
 
+from werkzeug.datastructures import MultiDict
+
 from twitch_utils import COMMANDS_FILE
 
 DEBUG = not os.path.exists('config/.debug')
@@ -129,10 +131,24 @@ def reset_token_config(self):
     self.set_config('spotify-token', 'timestamp', '')
 
 
+def process_new_commands(form_data):
+    replacement_names = [(key.split("_")[1], form_data[key].lower()) for key in form_data.keys() if key.startswith('simple_new command') and key.endswith("_name")]
+    for old_name, new_name in replacement_names:
+        new_command_keys = [(key, key.replace(key.split('_')[1], new_name.lower())) for key in form_data.keys() if
+                            key.startswith(f'simple_{old_name}') and not key.endswith("_name")]
+        # Update the keys in form_data
+        for old_key, new_key in new_command_keys:
+            form_data[new_key] = form_data.pop(old_key)
+        form_data.pop(f'simple_{old_name}_name')
+    return form_data
+
+
 def process_form(form_data):
     commands = {}
+    processed_data = MultiDict(form_data)
+    processed_data = process_new_commands(processed_data)
     # Parse form data and update commands dictionary
-    for key, value in form_data.items():
+    for key, value in processed_data.items():
         section, command_name, attribute = key.split('_')
         if section not in commands:
             commands[section] = {}

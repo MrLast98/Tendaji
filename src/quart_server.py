@@ -1,9 +1,10 @@
 import configparser
 import json
 import os
+from asyncio import CancelledError
 from time import time
 
-from quart import Quart, request, render_template, Response, redirect, send_from_directory
+from quart import Quart, request, render_template, Response, redirect, send_from_directory, url_for
 
 from manager_utils import is_string_valid, process_form
 from spotify import get_token, get_current_track
@@ -24,17 +25,9 @@ def update_queue(track_name, artist_name):
     # print_queue_to_file(queue)
 
 
-# def signal_handler(loop):
-#     """Initiates the shutdown process."""
-#     print_to_logs("Signal received, shutting down.")
-#     for task in asyncio.all_tasks(loop):
-#         task.cancel()
-#     asyncio.ensure_future(shutdown())
-
-
 class QuartServer:
     def __init__(self, manager):
-        self.app = Quart(__name__)
+        self.app = Quart(__name__, template_folder='../templates', static_folder='../static')
         self.app.add_url_rule('/', view_func=self.index)
         self.app.add_url_rule('/callback', view_func=self.callback)
         self.app.add_url_rule('/callback_twitch', view_func=self.callback_twitch)
@@ -52,13 +45,16 @@ class QuartServer:
         return await render_template('index.html')
 
     async def favicon(self):
-        return await send_from_directory(os.path.join(self.app.root_path), 'static/favicon.ico')
+        return await send_from_directory(os.path.join(self.app.root_path, '..', 'static'), 'favicon.ico')
 
     def event_stream(self):
-        while not self.manager.shutdown_flag.is_set():
-            message = self.manager.queue.get(block=True)
-            if is_string_valid(message):
-                yield f"data: {message}\n\n"
+        try:
+            while not self.manager.shutdown_flag.is_set():
+                message = self.manager.queue.get(block=True)
+                if is_string_valid(message):
+                    yield f"data: {message}\n\n"
+        except CancelledError:
+            pass
 
     async def stream(self):
         return Response(self.event_stream(), mimetype='text/event-stream')
@@ -66,7 +62,7 @@ class QuartServer:
     async def commands_config(self):
         with open(COMMANDS_FILE, 'r', encoding='utf-8') as f:
             self.commands = json.loads(f.read())
-        return await render_template('config.html', commands=self.commands)
+        return await render_template('commands.html', commands=self.commands, tooltip_text="amaronn")
 
     async def save_commands(self):
         form_data = await request.form
@@ -179,10 +175,7 @@ class QuartServer:
             <head>
                 <title>Currently Playing</title>
                 <meta http-equiv="refresh" content="{refresh_rate}">
-                <style>
-                    body {{ font-family: Arial, sans-serif; }}
-                    .album-art {{ width: 300px; }}
-                </style>
+                <link rel="stylesheet" href="{url_for('static', filename='styles.css')}">
             </head>
             <body>
                 <div>

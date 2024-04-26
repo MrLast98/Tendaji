@@ -67,7 +67,7 @@ def add_song_id(token, track_id):
 def get_queue(token):
     headers = {'Authorization': f'Bearer {token}'}
     response = requests.get('https://api.spotify.com/v1/me/player/queue', headers=headers, timeout=5)
-    return response.json()
+    return handle_responses(response)
 
 
 # Play/Resume
@@ -95,7 +95,13 @@ def skip(token):
 def get_current_track(token):
     headers = {'Authorization': f'Bearer {token}'}
     response = requests.get('https://api.spotify.com/v1/me/player/currently-playing', headers=headers, timeout=5)
-    return response.json()
+    return handle_responses(response)
+
+
+def handle_responses(response):
+    if response.status_code != 204 and response.status_code in range(200, 299):
+        return response.json()
+    return None
 
 
 # Generate Code Verifier and Code Challenge
