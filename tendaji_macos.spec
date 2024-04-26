@@ -3,7 +3,7 @@
 a = Analysis(['src/manager.py'],
              pathex=['.'],
              binaries=[],
-             datas=[('templates/*', 'templates'), ('localhost.ecc.crt', '.'), ('localhost.ecc.key', '.'), ('static/*', '.')],
+             datas=[('templates/*', 'templates'), ('localhost.ecc.crt', '.'), ('localhost.ecc.key', '.'), ('static/*', 'static')],
              hiddenimports=[],
              hookspath=[],
              runtime_hooks=[],

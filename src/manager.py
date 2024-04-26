@@ -1,9 +1,10 @@
 import json
+import platform
 import secrets
 import sys
 from asyncio import create_task, run, CancelledError, sleep, gather, Event
 from datetime import timedelta
-from os import path, remove, mkdir
+from os import path, remove, mkdir, chdir
 from queue import Queue
 
 import uvicorn
@@ -277,6 +278,8 @@ class Manager:
 
 
 if __name__ == '__main__':
+    if platform.system() == 'Darwin':
+        chdir(path.sep.join(sys.argv[0].split(path.sep)[:-1]))
     manager = Manager()
     try:
         run(manager.main())

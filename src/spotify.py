@@ -169,6 +169,6 @@ async def refresh_spotify_token(self):
         self.set_config('spotify-token', 'timestamp', str(int(time())))
         self.save_config()
     else:
-        self.print.print_to_logs(f"Failed to refresh Spotify token: {response.status}", self.print.YELLOW)
+        self.print.print_to_logs(f"Failed to refresh Spotify token: {response['error']}", self.print.YELLOW)
         self.print.print_to_logs(f"Response: {response}", self.print.WHITE)
         await start_spotify_oauth_flow(self)
