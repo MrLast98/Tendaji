@@ -261,6 +261,8 @@ def parse_tags(tags):
         dict_parsed_tags[parsed_tag[0]] = tag_value
     if not dict_parsed_tags.get('vip'):
         dict_parsed_tags['vip'] = False
+    if not dict_parsed_tags.get('broadcaster'):
+        dict_parsed_tags['broadcaster'] = False
     return dict_parsed_tags
 
 
