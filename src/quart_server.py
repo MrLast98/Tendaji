@@ -28,17 +28,22 @@ def update_queue(track_name, artist_name):
 class QuartServer:
     def __init__(self, manager):
         self.app = Quart(__name__, template_folder='../templates', static_folder='../static')
+        self.manager = manager
+        self.commands = None
+        self.setup_routing()
+
+    def setup_routing(self):
         self.app.add_url_rule('/', view_func=self.index)
         self.app.add_url_rule('/callback', view_func=self.callback)
         self.app.add_url_rule('/callback_twitch', view_func=self.callback_twitch)
-        self.app.add_url_rule('/currently_playing', view_func=self.currently_playing)
-        self.app.add_url_rule('/stream', view_func=self.stream)
-        self.app.add_url_rule('/save', view_func=self.save_commands, methods=['POST'])
-        self.app.add_url_rule('/reset', methods=['POST'], view_func=self.reset_config)
         self.app.add_url_rule('/commands', view_func=self.commands_config)
+        self.app.add_url_rule('/currently_playing', view_func=self.currently_playing)
         self.app.add_url_rule('/favicon.ico', view_func=self.favicon)
-        self.manager = manager
-        self.commands = None
+        self.app.add_url_rule('/reset', methods=['POST'], view_func=self.reset_config)
+        self.app.add_url_rule('/save', view_func=self.save_commands, methods=['POST'])
+        self.app.add_url_rule('/save_config', view_func=self.save_config, methods=['POST'])
+        self.app.add_url_rule('/setup', view_func=self.setup)
+        self.app.add_url_rule('/stream', view_func=self.stream)
 
     @staticmethod
     async def index():
@@ -73,6 +78,29 @@ class QuartServer:
     @staticmethod
     def reset_config():
         return redirect('/commands')
+
+    async def setup(self):
+        return await render_template('first_time_configuration.html', needed_values=self.manager.needed_values)
+
+    async def save_config(self):
+        form_data = await request.form
+        for key, value in form_data.items():
+            section, item = key.split("-")
+            self.manager.set_config(section, item, value)
+            self.manager.save_config()
+        self.manager.authentication_flag.clear()
+        return '''
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Spotify Token Retrieved</title>
+                </head>
+                <body>
+                    <p>You can close this window.</p>
+                </body>
+                </html>
+            '''
+
 
     async def callback(self):
         response = get_token(self.manager.configuration['spotify']['client_id'],

@@ -6,6 +6,7 @@ from asyncio import create_task, run, CancelledError, sleep, gather, Event
 from datetime import timedelta
 from os import path, remove, mkdir, chdir
 from queue import Queue
+from webbrowser import open as wbopen
 
 import uvicorn
 from websockets import ConnectionClosedOK
@@ -32,6 +33,7 @@ class Manager:
         self.delay = None
         self.server = None
         self.queue = Queue()
+        self.needed_values = []
         self.configuration = {
             'app': {
                 'last_opened': None,
@@ -135,11 +137,12 @@ class Manager:
                         self.configuration[section][item] = 'en'
                     case _:
                         if section in ('twitch', 'spotify'):
-                            question = self.translation_manager.get_translation('insert_missing_configuration')
-                            section_name = self.translation_manager.get_dictionary(section)
-                            item_name = self.translation_manager.get_dictionary(item)
-                            value = input(f"{question}{section_name} {item_name}: ")
-                            self.configuration[section][item] = value
+                            self.needed_values.append((section, item))
+                            # question = self.translation_manager.get_translation('insert_missing_configuration')
+                            # section_name = self.translation_manager.get_dictionary(section)
+                            # item_name = self.translation_manager.get_dictionary(item)
+                            # value = input(f"{question}{section_name} {item_name}: ")
+                            # self.configuration[section][item] = value
                         else:
                             self.configuration[section][item] = ''
 
@@ -265,7 +268,10 @@ class Manager:
 
     async def main(self):
         self.tasks['quart'] = create_task(self.create_server())
-        await sleep(0.5)
+        if len(self.needed_values) > 0:
+            self.authentication_flag.set()
+            wbopen('https://localhost:5000/setup')
+            await self.await_authentication()
         await self.check_tokens()
         if self.bot is None and self.tasks['bot'] is None:
             await self.create_new_bot()
