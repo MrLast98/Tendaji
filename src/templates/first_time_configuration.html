@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang='en'>
 <head>
-    <meta charset="UTF-8">
+    <meta charset='UTF-8'>
     <title>First time Configuration</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css">
-    <script src="https://unpkg.com/htmx.org@1.7.1"></script>
+    <link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css'>
+    <script src='https://unpkg.com/htmx.org@1.7.1'></script>
     <style>
         /* Custom styles */
         body {
@@ -16,20 +16,20 @@
         h4 {
             margin-top: 10px;
         }
-        select, input[type="text"], input[type="checkbox"], button {
+        select, input[type='text'], input[type='checkbox'], button {
             margin-bottom: 10px;
         }
     </style>
 </head>
 <body>
-    <form action="{{ url_for('save_config') }}" method="post">
-        <div class="six columns">
+    <form action='{{ url_for('save_config') }}' method='post'>
+        <div class='six columns'>
             <h2>Configuration</h2>
             {% for section, item in needed_values %}
                 <h4>{{ ' '.join([(section[0].upper() + section[1:]),(item[0].upper() + item[1:])]) }}</h4>
-                <input class="u-full-width" type="text" name="{{section}}-{{item}}" value="">
+                <input class='u-full-width' type='text' name='{{section}}-{{item}}' value=''>
             {% endfor %}
-            <button class="button-primary" type="submit">Save Config</button>
+            <button class='button-primary' type='submit'>Save Config</button>
         </div>
     </form>
 </body>

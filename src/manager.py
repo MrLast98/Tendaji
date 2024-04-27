@@ -4,7 +4,7 @@ import secrets
 import sys
 from asyncio import create_task, run, CancelledError, sleep, gather, Event
 from datetime import timedelta
-from os import path, remove, mkdir, chdir
+from os import path, mkdir, chdir
 from queue import Queue
 from webbrowser import open as wbopen
 
@@ -20,8 +20,6 @@ from twitch import TwitchWebSocketManager
 from twitch_utils import start_twitch_oauth_flow, refresh_twitch_token
 
 # Files Location
-# COMMANDS_FILE = 'config/commands.json'
-QUEUE_FILE = 'queue.json'
 CONFIG_FILE = 'config/config.json'
 
 
@@ -111,10 +109,11 @@ class Manager:
                 reset_token_config(self)
                 self.save_config()
 
-        self.print.print_to_logs('Checking for queue existence...', self.print.BRIGHT_PURPLE)
-        if path.exists(QUEUE_FILE):
-            remove(QUEUE_FILE)
-            self.print.print_to_logs('Cleared queue', self.print.BRIGHT_PURPLE)
+        # if not path.exists('templates'):
+        #     self.print.print_to_logs('No templates found, writing down default templates', self.print.YELLOW)
+        #     mkdir('templates')
+        #     write_default_templates()
+        #     self.print.print_to_logs('Default templates written!', self.print.GREEN)
 
     def setup(self):
         sections = {
@@ -159,17 +158,20 @@ class Manager:
         self.print.print_to_logs('Configuration loaded', self.print.BRIGHT_PURPLE)
 
     async def await_authentication(self):
-        while self.authentication_flag.is_set():
-            await sleep(1)
-        self.print.print_to_logs('Authentication completed!', self.print.GREEN)
+        try:
+            while self.authentication_flag.is_set():
+                await sleep(1)
+            self.print.print_to_logs('Authentication completed!', self.print.GREEN)
+        except CancelledError:
+            pass
 
     @staticmethod
     def resource_path(relative_path):
         try:
             base_path = sys._MEIPASS
         except Exception:
+            # base_path = path.sep.join(sys.argv[0].split(path.sep)[:-1])
             base_path = path.abspath('.')
-
         return str(path.join(base_path, relative_path))
 
     async def create_server(self):

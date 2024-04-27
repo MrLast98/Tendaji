@@ -26,12 +26,7 @@ class PrintColors:
     def print_to_logs(self, message, color):
         current_date = datetime.now().strftime('%d-%m-%Y')
         file_name = f"logs/logs-{current_date}.txt"
-        # check_log_file()
         if not os.path.exists(file_name):
-            # if len(self.log_queue) == 0:
-            #     self.log_queue.append((f"LOGS CREATED  - {file_name}", PrintColors.YELLOW))
-            # self.log_queue.append((message, color))
-            # return
             with open(file_name, 'w', encoding='utf-8'):
                 pass
         if os.path.exists(file_name) and len(self.log_queue) > 0:
@@ -50,7 +45,6 @@ def new_print(message, color):
     message = f"{timestamp} | {color}{level}{PrintColors.WHITE}: {color}{message}{PrintColors.WHITE}"
     current_date = datetime.now().strftime('%d-%m-%Y')
     file_name = f"logs/logs-{current_date}.txt"
-    # if DEBUG:
     print(message)
     # Open the log file and append the log entry
     with open(file_name, 'a', encoding='utf-8') as file:
@@ -175,3 +169,9 @@ def process_form(form_data):
     print(json.dumps(commands, indent=4))
     with open(COMMANDS_FILE, 'w', encoding='utf-8') as f:
         f.write(json.dumps(commands, indent=4))
+
+
+def write_default_templates():
+    for filename, file in default_templates:
+        with open(f'templates/{filename}', 'w', encoding='utf-8') as f:
+            f.write(file)

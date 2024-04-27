@@ -1,11 +1,12 @@
-import configparser
 import json
-import os
+import sys
 from asyncio import CancelledError
+from os import path
 from time import time
 
-from quart import Quart, request, render_template, Response, redirect, send_from_directory, url_for
+from quart import Quart, request, Response, redirect, send_from_directory, render_template_string
 
+from defaults import DEFAULT_FIRST_TIME_CONFIGURATION_HTML, DEFAULT_INDEX_HTML, DEFAULT_COMMANDS_HTML
 from manager_utils import is_string_valid, process_form
 from spotify import get_token, get_current_track
 from twitch_utils import retrieve_token_info, COMMANDS_FILE
@@ -13,7 +14,6 @@ from twitch_utils import retrieve_token_info, COMMANDS_FILE
 # Configuration and Flask App
 CONFIG_FILE = 'config/config.json'
 QUEUE_FILE = 'queue.json'
-config = configparser.ConfigParser()
 TWITCH_TOKEN_URL = 'https://id.twitch.tv/oauth2/token'
 
 
@@ -27,7 +27,7 @@ def update_queue(track_name, artist_name):
 
 class QuartServer:
     def __init__(self, manager):
-        self.app = Quart(__name__, template_folder='../templates', static_folder='../static')
+        self.app = Quart(__name__)
         self.manager = manager
         self.commands = None
         self.setup_routing()
@@ -47,10 +47,10 @@ class QuartServer:
 
     @staticmethod
     async def index():
-        return await render_template('index.html')
+        return await render_template_string(DEFAULT_INDEX_HTML)
 
     async def favicon(self):
-        return await send_from_directory(os.path.join(self.app.root_path, '..', 'static'), 'favicon.ico')
+        return await send_from_directory(f'{path.sep.join(sys.argv[0].split(path.sep)[:-1])}/static', 'favicon.ico')
 
     def event_stream(self):
         try:
@@ -67,7 +67,7 @@ class QuartServer:
     async def commands_config(self):
         with open(COMMANDS_FILE, 'r', encoding='utf-8') as f:
             self.commands = json.loads(f.read())
-        return await render_template('commands.html', commands=self.commands, tooltip_text="amaronn")
+        return await render_template_string(DEFAULT_COMMANDS_HTML, commands=self.commands)
 
     async def save_commands(self):
         form_data = await request.form
@@ -80,7 +80,7 @@ class QuartServer:
         return redirect('/commands')
 
     async def setup(self):
-        return await render_template('first_time_configuration.html', needed_values=self.manager.needed_values)
+        return await render_template_string(DEFAULT_FIRST_TIME_CONFIGURATION_HTML, needed_values=self.manager.needed_values)
 
     async def save_config(self):
         form_data = await request.form
@@ -195,7 +195,7 @@ class QuartServer:
                 refresh_rate = 30
             else:
                 refresh_rate = ((track_duration - progress) / 1000) + 2  # Convert to seconds and adds 2 seconds
-                if os.path.exists(QUEUE_FILE):
+                if path.exists(QUEUE_FILE):
                     update_queue(track_name, artist_name)
             html_content = f'''
             <!DOCTYPE html>
@@ -203,7 +203,7 @@ class QuartServer:
             <head>
                 <title>Currently Playing</title>
                 <meta http-equiv="refresh" content="{refresh_rate}">
-                <link rel="stylesheet" href="{url_for('static', filename='styles.css')}">
+                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css">
             </head>
             <body>
                 <div>

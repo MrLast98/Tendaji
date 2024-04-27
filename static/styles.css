@@ -1,7 +1,0 @@
-body {
-    /* Set the font and font color */
-    font-family: Arial, sans-serif;
-    color: #BFDBF7;
-    background: #100B00;
-    .album-art {{ width: 300px; }}
-}
