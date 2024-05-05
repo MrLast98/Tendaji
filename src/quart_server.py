@@ -59,6 +59,8 @@ class QuartServer:
         elif page_name == 'setup':
             return await render_template_string(DEFAULT_FIRST_TIME_CONFIGURATION_HTML,
                                                 needed_values=self.manager.needed_values)
+        elif page_name == 'currently_playing':
+            return await render_template_string(self.current_song())
         else:
             return "Page not found", 404
 
@@ -95,6 +97,45 @@ class QuartServer:
     async def setup(self):
         return await render_template_string(DEFAULT_FIRST_TIME_CONFIGURATION_HTML, needed_values=self.manager.needed_values)
 
+    def current_song(self):
+        track = get_current_track(self.manager.configuration['spotify-token']['access_token'])
+        if track:
+            track_name = track['item']['name']
+            artist_name = track['item']['artists'][0]['name']
+
+            album_name = track['item']['album']['name']
+            album_image_url = track['item']['album']['images'][0]['url'] if track['item']['album'][
+                'images'] else 'No image available'
+            track_duration = int(track['item']['duration_ms'])
+            progress = int(track['progress_ms'])
+            if track_duration - progress >= 30000:
+                refresh_rate = 30
+            else:
+                refresh_rate = ((track_duration - progress) / 1000) + 2  # Convert to seconds and adds 2 seconds
+                if path.exists(QUEUE_FILE):
+                    update_queue(track_name, artist_name)
+            html_content = f'''
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Currently Playing</title>
+                        <meta http-equiv="refresh" content="{refresh_rate}">
+                        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css">
+                    </head>
+                    <body>
+                        <div>
+                            <h1>Currently Playing</h1>
+                            <p><strong>Track:</strong> {track_name}</p>
+                            <p><strong>Artist:</strong> {artist_name}</p>
+                            <p><strong>Album:</strong> {album_name}</p>
+                            <img src="{album_image_url}" alt="Album art" class="album-art" />
+                        </div>
+                    </body>
+                    </html>
+                    '''
+            return html_content
+        return 'No track is currently playing.'
+
     async def save_config(self):
         form_data = await request.form
         for key, value in form_data.items():
@@ -113,6 +154,9 @@ class QuartServer:
                 </body>
                 </html>
             '''
+
+    async def currently_playing(self):
+        return await render_template_string(self.current_song())
 
     async def callback(self):
         response = get_token(self.manager.configuration['spotify']['client_id'],
@@ -191,42 +235,3 @@ class QuartServer:
                 </body>
                 </html>
             '''
-
-    async def currently_playing(self):
-        track = get_current_track(self.manager.configuration['spotify-token']['access_token'])
-        if track:
-            track_name = track['item']['name']
-            artist_name = track['item']['artists'][0]['name']
-
-            album_name = track['item']['album']['name']
-            album_image_url = track['item']['album']['images'][0]['url'] if track['item']['album'][
-                'images'] else 'No image available'
-            track_duration = int(track['item']['duration_ms'])
-            progress = int(track['progress_ms'])
-            if track_duration - progress >= 30000:
-                refresh_rate = 30
-            else:
-                refresh_rate = ((track_duration - progress) / 1000) + 2  # Convert to seconds and adds 2 seconds
-                if path.exists(QUEUE_FILE):
-                    update_queue(track_name, artist_name)
-            html_content = f'''
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Currently Playing</title>
-                <meta http-equiv="refresh" content="{refresh_rate}">
-                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css">
-            </head>
-            <body>
-                <div>
-                    <h1>Currently Playing</h1>
-                    <p><strong>Track:</strong> {track_name}</p>
-                    <p><strong>Artist:</strong> {artist_name}</p>
-                    <p><strong>Album:</strong> {album_name}</p>
-                    <img src="{album_image_url}" alt="Album art" class="album-art" />
-                </div>
-            </body>
-            </html>
-            '''
-            return html_content
-        return 'No track is currently playing.'

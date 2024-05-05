@@ -4,9 +4,8 @@ DEFAULT_BASE_HTML = """
 <head>
     <meta charset="UTF-8">
     <title>{% block title %}Tendaji{% endblock %}</title>
-    <!-- Include any CSS or JS files here -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css">
-    <script src="https://unpkg.com/htmx.org@1.7.1"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
         /* Custom styles */
         body {
@@ -26,31 +25,45 @@ DEFAULT_BASE_HTML = """
 <body>
     <nav>
         <ul>
-            <li><a href="/" class="navButton">Home</a></li>
-            <li><a href="/commands" class="navButton">Commands</a></li>
-            <li><a href="/currently_playing" class="navButton">Currently Playing</a></li>
-            <li><a href="/dashboard}" class="navButton">Dashboard</a></li>
-            <!-- <li><a href="/about" class="navButton">About</a></li> -->
+            <li><a href="#home" class="navButton">Home</a></li>
+            <li><a href="#commands" class="navButton">Commands</a></li>
+            <li><a href="#currently_playing" class="navButton">Currently Playing</a></li>
+            <li><a href="#dashboard" class="navButton">Dashboard</a></li>
         </ul>
     </nav>
     <div id="dynamicContent">
         <!-- Content will be loaded here -->
     </div>
     <script>
-        document.querySelectorAll('.navButton').forEach(button => {
-            button.addEventListener('click', event => {
-                event.preventDefault(); // Prevent the default action
-                const targetUrl = event.target.href; // Get the URL of the clicked button
-                fetch(targetUrl)
-                   .then(response => response.text()) // Convert the response to text
-                   .then(html => {
-                        document.getElementById('dynamicContent').innerHTML = html; // Update the content placeholder
+        $(document).ready(function() {
+            // Function to load content based on hash
+            function loadContent() {
+                var hash = window.location.hash.substring(1); // Remove the '#'
+                if (hash) {
+                    $("#dynamicContent").load('/page/' + hash, function() {
+                        // Optional: Do something after content has been loaded
                     });
+                }
+            }
+
+            // Load content initially based on the current hash
+            loadContent();
+
+            // Listen for hash changes
+            $(window).on('hashchange', function() {
+                loadContent();
+            });
+
+            $(".navButton").click(function(e) {
+                e.preventDefault(); // Prevent the default action
+                var targetHash = $(this).attr("href"); // Get the hash of the clicked button
+                window.location.hash = targetHash; // Update the hash
             });
         });
     </script>
 </body>
 </html>
+
 """
 
 
