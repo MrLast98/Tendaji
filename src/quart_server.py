@@ -6,9 +6,10 @@ from time import time
 
 from quart import Quart, request, Response, redirect, send_from_directory, render_template_string
 
-from defaults import DEFAULT_FIRST_TIME_CONFIGURATION_HTML, DEFAULT_INDEX_HTML, DEFAULT_COMMANDS_HTML
 from manager_utils import is_string_valid, process_form
 from spotify import get_token, get_current_track
+from templates import DEFAULT_FIRST_TIME_CONFIGURATION_HTML, DEFAULT_COMMANDS_HTML, \
+    DEFAULT_BASE_HTML, DEFAULT_DASHBOARD_HTML
 from twitch_utils import retrieve_token_info, COMMANDS_FILE
 
 # Configuration and Flask App
@@ -36,18 +37,30 @@ class QuartServer:
         self.app.add_url_rule('/', view_func=self.index)
         self.app.add_url_rule('/callback', view_func=self.callback)
         self.app.add_url_rule('/callback_twitch', view_func=self.callback_twitch)
-        self.app.add_url_rule('/commands', view_func=self.commands_config)
+        self.app.add_url_rule('/page/<page_name>', view_func=self.render_page)
         self.app.add_url_rule('/currently_playing', view_func=self.currently_playing)
         self.app.add_url_rule('/favicon.ico', view_func=self.favicon)
         self.app.add_url_rule('/reset', methods=['POST'], view_func=self.reset_config)
         self.app.add_url_rule('/save', view_func=self.save_commands, methods=['POST'])
         self.app.add_url_rule('/save_config', view_func=self.save_config, methods=['POST'])
-        self.app.add_url_rule('/setup', view_func=self.setup)
         self.app.add_url_rule('/stream', view_func=self.stream)
 
     @staticmethod
     async def index():
-        return await render_template_string(DEFAULT_INDEX_HTML)
+        return await render_template_string(DEFAULT_BASE_HTML)
+
+    async def render_page(self, page_name):
+        if page_name == 'commands':
+            with open(COMMANDS_FILE, 'r', encoding='utf-8') as f:
+                self.commands = json.loads(f.read())
+            return await render_template_string(DEFAULT_COMMANDS_HTML, commands=self.commands)
+        elif page_name == 'dashboard':
+            return await render_template_string(DEFAULT_DASHBOARD_HTML)
+        elif page_name == 'setup':
+            return await render_template_string(DEFAULT_FIRST_TIME_CONFIGURATION_HTML,
+                                                needed_values=self.manager.needed_values)
+        else:
+            return "Page not found", 404
 
     async def favicon(self):
         return await send_from_directory(f'{path.sep.join(sys.argv[0].split(path.sep)[:-1])}/static', 'favicon.ico')
@@ -64,10 +77,10 @@ class QuartServer:
     async def stream(self):
         return Response(self.event_stream(), mimetype='text/event-stream')
 
-    async def commands_config(self):
-        with open(COMMANDS_FILE, 'r', encoding='utf-8') as f:
-            self.commands = json.loads(f.read())
-        return await render_template_string(DEFAULT_COMMANDS_HTML, commands=self.commands)
+    # async def commands_config(self):
+    #     with open(COMMANDS_FILE, 'r', encoding='utf-8') as f:
+    #         self.commands = json.loads(f.read())
+    #     return await render_template_string(DEFAULT_COMMANDS_HTML, commands=self.commands)
 
     async def save_commands(self):
         form_data = await request.form
@@ -100,7 +113,6 @@ class QuartServer:
                 </body>
                 </html>
             '''
-
 
     async def callback(self):
         response = get_token(self.manager.configuration['spotify']['client_id'],
