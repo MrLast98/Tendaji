@@ -150,7 +150,7 @@ async def start_spotify_oauth_flow(self):
     self.verify, challenge = generate_code_verifier_and_challenge()
     auth_url = get_authorization_code(self.configuration['spotify']['client_id'],
                                       self.configuration['spotify']['redirect_uri'], challenge,
-                                      self.quart.app.secret_key)
+                                      secrets.token_hex(64))
     wbopen(auth_url)
     self.authentication_flag.set()
     await self.await_authentication()

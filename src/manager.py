@@ -17,7 +17,7 @@ from quart_server import QuartServer
 from spotify import start_spotify_oauth_flow, refresh_spotify_token
 from translations import TranslationManager
 from twitch import TwitchWebSocketManager
-from twitch_utils import start_twitch_oauth_flow, refresh_twitch_token
+from twitch_webhook_utils import start_twitch_oauth_flow, refresh_twitch_token
 
 # Files Location
 CONFIG_FILE = 'config/config.json'
@@ -86,34 +86,6 @@ class Manager:
         self.setup()
         # self.save_config()
         self.print.print_to_logs('Configuration Loaded', self.print.GREEN)
-        self.print.print_to_logs('Do you want to reset the tokens? [Y/]', self.print.WHITE)
-        # print('Do you want to reset the tokens? [Y/]')
-        i = input('> ')
-        if 'y' in i.lower():
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-
-            # Reset tokens to empty strings
-            reset_token_config(self)
-            self.print.print_to_logs('Token for Spotify and Twitch correctly reset!', self.print.GREEN)
-            # Write the updated data back to the file
-            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=4)
-
-        filename = f"logs/logs-{return_date_string()}.txt"
-        if not path.exists(filename):
-            with open(filename, 'w', encoding='utf-8') as f:
-                f.write(f"LOGS CREATION - {filename}\n")
-            if 'y' not in i.lower():
-                self.print.print_to_logs('New Logs generated!', self.print.YELLOW)
-                reset_token_config(self)
-                self.save_config()
-
-        # if not path.exists('templates'):
-        #     self.print.print_to_logs('No templates found, writing down default templates', self.print.YELLOW)
-        #     mkdir('templates')
-        #     write_default_templates()
-        #     self.print.print_to_logs('Default templates written!', self.print.GREEN)
 
     def setup(self):
         sections = {
@@ -174,6 +146,30 @@ class Manager:
             base_path = path.abspath('.')
         return str(path.join(base_path, relative_path))
 
+    def reset_tokens_step(self):
+        self.print.print_to_logs('Do you want to reset the tokens? [Y/]', self.print.WHITE)
+        # print('Do you want to reset the tokens? [Y/]')
+        i = input('> ')
+        if 'y' in i.lower():
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            # Reset tokens to empty strings
+            reset_token_config(self)
+            self.print.print_to_logs('Token for Spotify and Twitch correctly reset!', self.print.GREEN)
+            # Write the updated data back to the file
+            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=4)
+
+        filename = f"logs/logs-{return_date_string()}.txt"
+        if not path.exists(filename):
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(f"LOGS CREATION - {filename}\n")
+            if 'y' not in i.lower():
+                self.print.print_to_logs('New Logs generated!', self.print.YELLOW)
+                reset_token_config(self)
+                self.save_config()
+
     async def create_server(self):
         self.quart.app.secret_key = secrets.token_hex(64)
         uvicorn_config = uvicorn.Config(self.quart.app, host='localhost', port=5000,
@@ -181,7 +177,7 @@ class Manager:
                                         ssl_keyfile=self.resource_path('localhost.ecc.key'),
                                         loop='asyncio', log_level='info')
         self.server = uvicorn.Server(config=uvicorn_config)
-        await self.server.serve()
+        return await self.server.serve()
 
     async def create_new_bot(self):
         if self.bot is not None and self.tasks['bot'] is not None:
@@ -194,7 +190,7 @@ class Manager:
             except ConnectionClosedOK:
                 pass
         self.bot = TwitchWebSocketManager(self)
-        self.tasks['bot'] = create_task(self.bot.run())
+        self.tasks['bot'] = await create_task(self.bot.run())
 
     async def check_spotify(self):
         self.print.print_to_logs('Spotify sanity check!', self.print.BRIGHT_PURPLE)
@@ -270,6 +266,7 @@ class Manager:
 
     async def main(self):
         self.tasks['quart'] = create_task(self.create_server())
+        self.reset_tokens_step()
         if len(self.needed_values) > 0:
             self.authentication_flag.set()
             wbopen('https://localhost:5000/setup')
@@ -277,7 +274,7 @@ class Manager:
         await self.check_tokens()
         if self.bot is None and self.tasks['bot'] is None:
             await self.create_new_bot()
-        self.tasks['updater'] = create_task(self.core_loop())
+        self.tasks['updater'] = await create_task(self.core_loop())
         tasks = [self.tasks['quart'], self.tasks['updater'], self.tasks['bot']]
         try:
             await gather(*tasks)

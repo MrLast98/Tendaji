@@ -62,6 +62,6 @@ class TwitchCommands:
 async def send_message(self, message, target=None):
     # Send a message to the channel or a specific user
     if target:
-        await self.websocket.send(f"PRIVMSG #{self.channel} :/w {target} {message}")
+        await self.chat_websocket.send(f"PRIVMSG #{self.channel} :/w {target} {message}")
     else:
-        await self.websocket.send(f"PRIVMSG #{self.channel} :{message}")
+        await self.chat_websocket.send(f"PRIVMSG #{self.channel} :{message}")

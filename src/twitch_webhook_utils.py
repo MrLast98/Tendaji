@@ -9,11 +9,12 @@ from webbrowser import open as wbopen
 import requests
 
 from defaults import DEFAULT_COMMANDS
+from src.ai_helper import analyze_sentiment
 from twitch_commands import FUNCTION_LIST, send_message
 
 COMMANDS_FILE = 'config/commands.json'
 KEYWORD_PATTERN = r'\[([^\]]+)\]'
-SCOPE_TWITCH = 'chat:read chat:edit'
+SCOPE_TWITCH = 'chat:read chat:edit moderator:read:followers'
 
 # Necessary Links for authorization
 TWITCH_AUTHORIZATION_URL = 'https://id.twitch.tv/oauth2/authorize'
@@ -61,11 +62,12 @@ async def handle_irc_message(self, message):
                 # Handle PART message
                 pass
             case 'PING':
-                await self.websocket.send('PONG')
+                await self.chat_websocket.send('PONG')
             case 'PRIVMSG':
                 self.manager.print.print_to_logs(
                     f"{message['tags']['display-name']}, {message['parameters'].strip('\r\n')}",
                     self.manager.print.BLUE)
+                self.manager.print.print_to_logs(analyze_sentiment(message['parameters'].strip('\r\n')), self.manager.print.BLUE)
                 display_message = format_message(message)
                 self.manager.queue.put(display_message)
                 if message['command'].get('botCommand'):

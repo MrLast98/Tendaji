@@ -10,7 +10,7 @@ from manager_utils import is_string_valid, process_form
 from spotify import get_token, get_current_track
 from templates import DEFAULT_FIRST_TIME_CONFIGURATION_HTML, DEFAULT_COMMANDS_HTML, \
     DEFAULT_BASE_HTML, DEFAULT_DASHBOARD_HTML
-from twitch_utils import retrieve_token_info, COMMANDS_FILE
+from twitch_webhook_utils import retrieve_token_info, COMMANDS_FILE
 
 # Configuration and Flask App
 CONFIG_FILE = 'config/config.json'

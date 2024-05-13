@@ -5,7 +5,7 @@ from time import time
 
 from werkzeug.datastructures import MultiDict
 
-from twitch_utils import COMMANDS_FILE
+from twitch_webhook_utils import COMMANDS_FILE
 
 DEBUG = not os.path.exists('config/.debug')
 
