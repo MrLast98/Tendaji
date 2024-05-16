@@ -6,9 +6,9 @@ import websockets
 from websockets import ConnectionClosedOK, ConnectionClosedError
 
 from manager_utils import PrintColors
-from src.twitch_eventsub_utils import get_user_info, subscribe_to_follow
+from src.twitch_eventsub_utils import get_user_info, subscribe_to_follow, handle_eventsub_messages
 from twitch_commands import TwitchCommands
-from twitch_webhook_utils import handle_irc_message, authenticate, join_channel
+from twitch_ircchat_utils import handle_irc_message, authenticate, join_channel
 
 EVENTSUB_URL = 'wss://eventsub.wss.twitch.tv/ws'
 CHAT_URL = 'wss://irc-ws.chat.twitch.tv:443'
@@ -52,10 +52,9 @@ class TwitchWebSocketManager:
                     message = json.loads(message)
                     if self.last_message_id != message['metadata']['message_id']:
                         self.last_message_id = message['metadata']['message_id']
-                        print(f"Eventsub Message:")
                         if message['metadata']['message_type'] != 'session_keepalive':
-                            print(message)
-                        # await handle_irc_message(self, message)
+                            # print(f"Eventsub Message: {message}")
+                            handle_eventsub_messages(self, message)
             except ConnectionClosedOK:
                 pass
             except ConnectionClosedError as e:

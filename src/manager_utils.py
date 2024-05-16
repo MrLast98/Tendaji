@@ -5,18 +5,19 @@ from time import time
 
 from werkzeug.datastructures import MultiDict
 
-from twitch_webhook_utils import COMMANDS_FILE
+from twitch_ircchat_utils import COMMANDS_FILE
 
 DEBUG = not os.path.exists('config/.debug')
 
 
 class PrintColors:
-    RED = '\033[91m'
-    YELLOW = '\033[93m'
-    GREEN = '\033[92m'
+    RED = '\033[38;5;203m'
+    YELLOW = '\033[38;5;227m'
+    GREEN = '\033[38;5;120m'
     WHITE = '\033[0m'
     BRIGHT_PURPLE = '\033[95m'
-    BLUE = '\033[95m'
+    BLUE = '\033[38;5;111m'
+    ORANGE = '\033[38;5;214m'
 
     def __init__(self):
         self.log_queue = []
@@ -65,6 +66,8 @@ def get_level_from_color(color):
             return 'MSG'
         case PrintColors.WHITE:
             return 'SYS'
+        case PrintColors.ORANGE:
+            return 'EVENT'
 
 
 def save_configuration_to_json(self, filename):
@@ -169,9 +172,3 @@ def process_form(form_data):
     print(json.dumps(commands, indent=4))
     with open(COMMANDS_FILE, 'w', encoding='utf-8') as f:
         f.write(json.dumps(commands, indent=4))
-
-
-def write_default_templates():
-    for filename, file in default_templates:
-        with open(f'templates/{filename}', 'w', encoding='utf-8') as f:
-            f.write(file)

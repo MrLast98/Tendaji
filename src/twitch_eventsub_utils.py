@@ -1,5 +1,6 @@
 import requests
 
+from src.twitch_ircchat_utils import replace_keywords
 
 TWITCH_EVENTSUB_URL = 'https://api.twitch.tv/helix/eventsub/subscriptions'
 
@@ -27,3 +28,10 @@ def get_user_info(self):
     if response.status_code in range(200, 299):
         return response.json()
     return None
+
+
+def handle_eventsub_messages(self, message):
+    match message['metadata']['subscription_type']:
+        case 'channel.follow':
+            message = replace_keywords("[user_name] ti sta seguendo!", message)
+            self.manager.print.print_to_logs(message, self.manager.print.ORANGE)

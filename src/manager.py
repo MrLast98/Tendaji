@@ -17,7 +17,7 @@ from quart_server import QuartServer
 from spotify import start_spotify_oauth_flow, refresh_spotify_token
 from translations import TranslationManager
 from twitch import TwitchWebSocketManager
-from twitch_webhook_utils import start_twitch_oauth_flow, refresh_twitch_token
+from twitch_ircchat_utils import start_twitch_oauth_flow, refresh_twitch_token
 
 # Files Location
 CONFIG_FILE = 'config/config.json'

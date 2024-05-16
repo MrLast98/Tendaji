@@ -9,7 +9,7 @@ from webbrowser import open as wbopen
 import requests
 
 from defaults import DEFAULT_COMMANDS
-from src.ai_helper import analyze_sentiment
+from src.ai_helper import toxicity_analysis
 from twitch_commands import FUNCTION_LIST, send_message
 
 COMMANDS_FILE = 'config/commands.json'
@@ -67,7 +67,7 @@ async def handle_irc_message(self, message):
                 self.manager.print.print_to_logs(
                     f"{message['tags']['display-name']}, {message['parameters'].strip('\r\n')}",
                     self.manager.print.BLUE)
-                self.manager.print.print_to_logs(analyze_sentiment(message['parameters'].strip('\r\n')), self.manager.print.BLUE)
+                self.manager.print.print_to_logs(f"Toxicity: {toxicity_analysis(message['parameters'].strip('\r\n'))}", self.manager.print.BLUE)
                 display_message = format_message(message)
                 self.manager.queue.put(display_message)
                 if message['command'].get('botCommand'):
@@ -187,6 +187,8 @@ def replace_keywords(message: string, original_message):
             match m:
                 case 'sender':
                     return re.sub(KEYWORD_PATTERN, f"@{original_message['tags']['display-name']}", message)
+                case 'user_name':
+                    return re.sub(KEYWORD_PATTERN, original_message['payload']['event']['user_name'], message)
     else:
         return message
 
