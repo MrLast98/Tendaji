@@ -1,4 +1,5 @@
 import re
+import time
 
 import spotify
 
@@ -9,6 +10,8 @@ URL_PATTERN = r'\b(?:https?|ftp):\/\/[\w\-]+(\.[\w\-]+)+[/\w\-?=&#%]*\b'
 class TwitchCommands:
     def __init__(self, twitch_manager):
         self.twitch_manager = twitch_manager
+        self.wait_until = 0
+        self.remaining_buffer_messages = 0
 
     async def song(self, params=None):
         response = spotify.get_queue(self.twitch_manager.manager.configuration['spotify-token']['access_token'])
@@ -60,8 +63,9 @@ class TwitchCommands:
 
 
 async def send_message(self, message, target=None):
-    # Send a message to the channel or a specific user
-    if target:
-        await self.chat_websocket.send(f"PRIVMSG #{self.channel} :/w {target} {message}")
-    else:
-        await self.chat_websocket.send(f"PRIVMSG #{self.channel} :{message}")
+    if time.time() >= self.wait_until and self.remaining_buffer_messages == 0:
+        # Send a message to the channel or a specific user
+        if target:
+            await self.chat_websocket.send(f"PRIVMSG #{self.channel} :/w {target} {message}")
+        else:
+            await self.chat_websocket.send(f"PRIVMSG #{self.channel} :{message}")
