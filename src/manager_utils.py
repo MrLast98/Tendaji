@@ -153,7 +153,10 @@ def process_form(form_data):
         # Initialize the second level of nesting
         if command_name not in commands[section]:
             commands[section][command_name] = {}
-        commands[section][command_name][attribute] = value
+        if attribute in ['timeout', 'min-messages']:
+            commands[section][command_name][attribute] = int(value)
+        else:
+            commands[section][command_name][attribute] = value
     for command_name, command_data in commands["simple"].items():
         # Check if the "enabled" key exists
         if "enabled" not in command_data:

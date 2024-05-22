@@ -1,5 +1,4 @@
 import re
-import time
 
 import spotify
 
@@ -10,30 +9,29 @@ URL_PATTERN = r'\b(?:https?|ftp):\/\/[\w\-]+(\.[\w\-]+)+[/\w\-?=&#%]*\b'
 class TwitchCommands:
     def __init__(self, twitch_manager):
         self.twitch_manager = twitch_manager
-        self.wait_until = 0
-        self.remaining_buffer_messages = 0
+        self.command_timeout = {}
 
-    async def song(self, params=None):
+    async def song(self):
         response = spotify.get_queue(self.twitch_manager.manager.configuration['spotify-token']['access_token'])
         currently_playing = spotify.parse_song(response['currently_playing'])
         await send_message(self.twitch_manager, currently_playing['name'])
 
-    async def play(self, params=None):
+    async def play(self):
         spotify.play(self.twitch_manager.manager.configuration['spotify-token']['access_token'])
         self.twitch_manager.manager.print.print_to_logs('Resumed!', self.twitch_manager.manager.print.YELLOW)
         await send_message(self.twitch_manager, 'Resumed!')
 
-    async def pause(self, params=None):
+    async def pause(self):
         spotify.pause(self.twitch_manager.manager.configuration['spotify-token']['access_token'])
         self.twitch_manager.manager.print.print_to_logs('Paused!', self.twitch_manager.manager.print.YELLOW)
         await send_message(self.twitch_manager, 'Paused!')
 
-    async def skip(self, params=None):
+    async def skip(self):
         spotify.skip(self.twitch_manager.manager.configuration['spotify-token']['access_token'])
         self.twitch_manager.manager.print.print_to_logs('Skipped!', self.twitch_manager.manager.print.YELLOW)
         await send_message(self.twitch_manager, 'Skipped!')
 
-    async def sbagliato(self, params=None):
+    async def sbagliato(self):
         await send_message(self.twitch_manager, 'Oh No')
 
     async def sr(self, requested_song):
@@ -63,9 +61,8 @@ class TwitchCommands:
 
 
 async def send_message(self, message, target=None):
-    if time.time() >= self.wait_until and self.remaining_buffer_messages == 0:
-        # Send a message to the channel or a specific user
-        if target:
-            await self.chat_websocket.send(f"PRIVMSG #{self.channel} :/w {target} {message}")
-        else:
-            await self.chat_websocket.send(f"PRIVMSG #{self.channel} :{message}")
+    # Send a message to the channel or a specific user
+    if target:
+        await self.chat_websocket.send(f"PRIVMSG #{self.channel} :/w {target} {message}")
+    else:
+        await self.chat_websocket.send(f"PRIVMSG #{self.channel} :{message}")

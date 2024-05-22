@@ -22,13 +22,17 @@ DEFAULT_COMMANDS = {
         "hello": {
             "message": "hello [sender]",
             "level": "ANY",
-            "enabled": True
+            "enabled": True,
+            "timeout": 0,
+            "min_messages": 0
         },
         "hotpants": {
             "message": "You're the shit [sender]",
-            "level": "SUB",
-            "enabled": True
-        },
+            "level": "MOD",
+            "enabled": True,
+            "timeout": 0,
+            "min_messages": 0
+        }
     },
     "complex": {}
 }

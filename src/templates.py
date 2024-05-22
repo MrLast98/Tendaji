@@ -103,6 +103,12 @@ DEFAULT_COMMANDS_HTML = """
                                 <h6 style="margin-right: 10px; margin-bottom: 0;">Command Status</h6>
                                 <input type="checkbox" name="simple_{{ command_name }}_enabled" {% if command_data.get('enabled') %}checked{% endif %} style="margin-bottom: 0; margin-top: 0; vertical-align: middle;">
                             </div>
+                            <div style="display: flex; align-items: center; margin-top: 10px;">
+                                <label for="simple_{{ command_name }}_timeout" style="margin-right: 10px; margin-bottom: 0;">Timeout (seconds):</label>
+                                <input class="u-full-width" type="number" name="simple_{{ command_name }}_timeout" min="0" max="3600" value="{{ command_data.get('timeout', 0) }}" style="width: 70px; margin-right: 20px;">
+                                <label for="simple_{{ command_name }}_min-messages" style="margin-right: 10px; margin-bottom: 0;">Min Messages:</label>
+                                <input class="u-full-width" type="number" name="simple_{{ command_name }}_min-messages" min="0" max="99" value="{{ command_data.get('min-messages', 0) }}" style="width: 50px;">
+                            </div>
                         </div>
                     {% endfor %}
                 </div>
@@ -144,7 +150,16 @@ DEFAULT_COMMANDS_HTML = """
                     <option value="VIP">VIP</option>
                     <option value="BROADCASTER">BROADCASTER</option>
                 </select>
-                <input type="checkbox" name="simple_${newCommandName.toLowerCase()}_enabled">
+                <div style="display: flex; align-items: center;">
+                    <h6 style="margin-right: 10px; margin-bottom: 0;">Command Status</h6>
+                    <input type="checkbox" name="simple_${newCommandName.toLowerCase()}_enabled">
+                </div>
+                <div style="display: flex; align-items: center; margin-top: 10px;">
+                    <label for="simple_${newCommandName.toLowerCase()}_timeout" style="margin-right: 10px; margin-bottom: 0;">Timeout (seconds):</label>
+                    <input class="u-full-width" type="number" name="simple_${newCommandName.toLowerCase()}_timeout" min="0" max="3600" value="0" style="width: 70px; margin-right: 20px;">
+                    <label for="simple_${newCommandName.toLowerCase()}_min-messages" style="margin-right: 10px; margin-bottom: 0;">Min Messages:</label>
+                    <input class="u-full-width" type="number" name="simple_${newCommandName.toLowerCase()}_min-messages" min="0" max="99" value="0" style="width: 50px;">
+                </div>
             </div>
         `;
         document.getElementById('simple-commands').insertAdjacentHTML('beforeend', newCommand);

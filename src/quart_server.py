@@ -79,16 +79,11 @@ class QuartServer:
     async def stream(self):
         return Response(self.event_stream(), mimetype='text/event-stream')
 
-    # async def commands_config(self):
-    #     with open(COMMANDS_FILE, 'r', encoding='utf-8') as f:
-    #         self.commands = json.loads(f.read())
-    #     return await render_template_string(DEFAULT_COMMANDS_HTML, commands=self.commands)
-
     async def save_commands(self):
         form_data = await request.form
         process_form(form_data)
-        await self.manager.create_new_bot()
-        return redirect('/commands')
+        self.manager.create_new_bot()
+        return redirect('/#commands')
 
     @staticmethod
     def reset_config():

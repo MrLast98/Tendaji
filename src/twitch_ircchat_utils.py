@@ -2,6 +2,7 @@ import json
 import os
 import re
 import string
+from asyncio import create_task
 from time import time
 from urllib.parse import urlencode
 from webbrowser import open as wbopen
@@ -9,7 +10,7 @@ from webbrowser import open as wbopen
 import requests
 
 from defaults import DEFAULT_COMMANDS
-from src.ai_helper import toxicity_analysis
+from src.ai_helper import analyse_and_print
 from twitch_commands import FUNCTION_LIST, send_message
 
 COMMANDS_FILE = 'config/commands.json'
@@ -64,15 +65,19 @@ async def handle_irc_message(self, message):
             case 'PING':
                 await self.chat_websocket.send('PONG')
             case 'PRIVMSG':
-                self.manager.print.print_to_logs(
-                    f"{message['tags']['display-name']}, {message['parameters'].strip('\r\n')}",
-                    self.manager.print.BLUE)
-                self.manager.print.print_to_logs(f"Toxicity: {toxicity_analysis(message['parameters'].strip('\r\n'))}", self.manager.print.BLUE)
                 display_message = format_message(message)
                 self.manager.queue.put(display_message)
+                if len(self.twitch_commands.command_timeout) > 0:
+                    for _, a in self.twitch_commands.command_timeout.items():
+                        if a['remaining_buffer_messages'] > 0:
+                            a['remaining_buffer_messages'] -= 1
                 if message['command'].get('botCommand'):
+                    self.manager.print.print_to_logs(
+                        f"{message['tags']['display-name']}, {message['parameters'].strip('\r\n')}",
+                        self.manager.print.BLUE)
                     await handle_commands(self, message)
-                # print(json.dumps(message, indent=4))
+                else:
+                    await create_task(analyse_and_print(self, message))
                 # Handle PRIVMSG message
             case 'CLEARCHAT':
                 # Handle CLEARCHAT message
@@ -113,7 +118,22 @@ async def handle_commands(self, message):
         if is_user_allowed(self, message['tags'], self.simple_commands[command]['level']):
             answer = self.simple_commands[command]['message']
             answer = replace_keywords(answer, message)
-            await send_message(self, answer)
+            if (command in self.twitch_commands.command_timeout and
+                (self.twitch_commands.command_timeout[command]['wait_until'] >= time() or
+                self.twitch_commands.command_timeout[command]['remaining_buffer_messages'] > 0)):
+                time_left = f"{self.twitch_commands.command_timeout[command]['wait_until'] - int(time())} seconds" if \
+                    self.twitch_commands.command_timeout[command]['wait_until'] > int(time()) else ""
+                buffer = f"{self.twitch_commands.command_timeout[command]['remaining_buffer_messages']} messages" if \
+                    self.twitch_commands.command_timeout[command]['remaining_buffer_messages'] > 0 else ""
+                message = f"{time_left}{' and ' if time_left != '' and buffer != '' else ''}{buffer}"
+                self.manager.print.print_to_logs(
+                    f"Timeout in effect! Remaining {message}",
+                    self.manager.print.YELLOW)
+            else:
+                self.twitch_commands.command_timeout[command] = {}
+                self.twitch_commands.command_timeout[command]['wait_until'] = int(time()) + int(self.simple_commands[command]['timeout'])
+                self.twitch_commands.command_timeout[command]['remaining_buffer_messages'] = self.simple_commands[command]['min-messages']
+                await send_message(self, answer)
     elif self.complex_commands.get(command):
         if is_user_allowed(self, message['tags'], self.complex_commands[command]['level']):
             func = getattr(self.twitch_commands, command)
