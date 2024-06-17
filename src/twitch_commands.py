@@ -11,27 +11,27 @@ class TwitchCommands:
         self.twitch_manager = twitch_manager
         self.command_timeout = {}
 
-    async def song(self):
+    async def song(self, _):
         response = spotify.get_queue(self.twitch_manager.manager.configuration['spotify-token']['access_token'])
         currently_playing = spotify.parse_song(response['currently_playing'])
         await send_message(self.twitch_manager, currently_playing['name'])
 
-    async def play(self):
+    async def play(self, _):
         spotify.play(self.twitch_manager.manager.configuration['spotify-token']['access_token'])
         self.twitch_manager.manager.print.print_to_logs('Resumed!', self.twitch_manager.manager.print.YELLOW)
         await send_message(self.twitch_manager, 'Resumed!')
 
-    async def pause(self):
+    async def pause(self, _):
         spotify.pause(self.twitch_manager.manager.configuration['spotify-token']['access_token'])
         self.twitch_manager.manager.print.print_to_logs('Paused!', self.twitch_manager.manager.print.YELLOW)
         await send_message(self.twitch_manager, 'Paused!')
 
-    async def skip(self):
+    async def skip(self, _):
         spotify.skip(self.twitch_manager.manager.configuration['spotify-token']['access_token'])
         self.twitch_manager.manager.print.print_to_logs('Skipped!', self.twitch_manager.manager.print.YELLOW)
         await send_message(self.twitch_manager, 'Skipped!')
 
-    async def sbagliato(self):
+    async def sbagliato(self, _):
         await send_message(self.twitch_manager, 'Oh No')
 
     async def sr(self, requested_song):

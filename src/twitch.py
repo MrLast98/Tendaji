@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import ssl
 from asyncio import Event, gather
 
@@ -30,6 +31,8 @@ class TwitchWebSocketManager:
                                     keyfile=self.manager.resource_path('localhost.ecc.key'))
         self.user = get_user_info(self)
         self.last_message_id = None
+        self.conn = sqlite3.connect('/home/tendaji/Work/chatAnalysis/database/database.sqlite')
+        self.cursor = self.conn.cursor()
 
     @property
     def headers(self):
@@ -81,6 +84,7 @@ class TwitchWebSocketManager:
             self.eventsub_connection(),
             self.chat_connection()
         )
+        self.cursor.close()
         # await self.chat_connection()
 
     async def close(self):

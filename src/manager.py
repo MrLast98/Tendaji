@@ -269,7 +269,7 @@ class Manager:
         self.reset_tokens_step()
         if len(self.needed_values) > 0:
             self.authentication_flag.set()
-            wbopen('https://localhost:5000/setup')
+            wbopen('https://localhost:5000/page/setup')
             await self.await_authentication()
         await self.check_tokens()
         if self.bot is None and self.tasks['bot'] is None:

@@ -132,13 +132,12 @@ async def handle_commands(self, message):
             else:
                 self.twitch_commands.command_timeout[command] = {}
                 self.twitch_commands.command_timeout[command]['wait_until'] = int(time()) + int(self.simple_commands[command]['timeout'])
-                self.twitch_commands.command_timeout[command]['remaining_buffer_messages'] = self.simple_commands[command]['min-messages']
+                self.twitch_commands.command_timeout[command]['remaining_buffer_messages'] = self.simple_commands[command]['min_messages']
                 await send_message(self, answer)
     elif self.complex_commands.get(command):
         if is_user_allowed(self, message['tags'], self.complex_commands[command]['level']):
             func = getattr(self.twitch_commands, command)
-            await func(
-                message['command'].get('botCommandParams') if message['command'].get('botCommandParams') else None)
+            await func(message['command'].get('botCommandParams') if message['command'].get('botCommandParams') else None)
 
 
 def is_user_allowed(self, author, level):
